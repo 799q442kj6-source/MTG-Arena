@@ -384,9 +384,32 @@ async function parseCSVAndEnrich(csvText) {
     // Load cache
     loadScryfallCache();
     
-    // Parse CSV first
-    const lines = csvText.split('\n');
-    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+    // Parse CSV - HANDLE MULTI-LINE FIELDS PROPERLY
+    const lines = [];
+    let currentLine = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < csvText.length; i++) {
+        const char = csvText[i];
+        
+        if (char === '"') {
+            inQuotes = !inQuotes;
+            currentLine += char;
+        } else if (char === '\n' && !inQuotes) {
+            if (currentLine.trim()) {
+                lines.push(currentLine);
+            }
+            currentLine = '';
+        } else {
+            currentLine += char;
+        }
+    }
+    
+    if (currentLine.trim()) {
+        lines.push(currentLine);
+    }
+    
+    const headers = parseCSVLine(lines[0]).map(h => h.trim());
     
     // CHECK IF ALREADY ENRICHED
     const isAlreadyEnriched = headers.includes('type') && 
@@ -405,7 +428,7 @@ async function parseCSVAndEnrich(csvText) {
         
         const card = {};
         headers.forEach((header, index) => {
-            card[header] = values[index] ? values[index].replace(/"/g, '') : '';
+            card[header] = values[index] ? values[index].replace(/^"|"$/g, '') : '';
         });
         
         card.Count = parseInt(card.Count) || 0;
