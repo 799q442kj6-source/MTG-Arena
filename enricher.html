@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MTG Collection Enricher</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background: rgba(42, 42, 64, 0.9);
+            border-radius: 12px;
+            padding: 3rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            color: #ffd700;
+            margin-bottom: 1rem;
+            text-align: center;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #cbd5e0;
+            margin-bottom: 2rem;
+            font-size: 1.1rem;
+        }
+
+        .upload-section {
+            background: rgba(58, 58, 85, 0.6);
+            border-radius: 8px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            border: 2px dashed #5a67d8;
+            text-align: center;
+        }
+
+        .upload-section h2 {
+            color: #ffd700;
+            margin-bottom: 1rem;
+        }
+
+        .file-input-label {
+            display: inline-block;
+            padding: 1rem 2rem;
+            background: linear-gradient(135deg, #5a67d8 0%, #4c51bf 100%);
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            margin: 1rem 0;
+        }
+
+        .file-input-label:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(90, 103, 216, 0.4);
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .progress-section {
+            display: none;
+            background: rgba(58, 58, 85, 0.6);
+            border-radius: 8px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .progress-bar-container {
+            width: 100%;
+            height: 40px;
+            background: rgba(30, 30, 46, 0.8);
+            border-radius: 20px;
+            overflow: hidden;
+            margin: 1rem 0;
+            position: relative;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #48bb78, #38a169);
+            width: 0%;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+        }
+
+        .progress-text {
+            text-align: center;
+            color: #cbd5e0;
+            font-size: 1.1rem;
+            margin-top: 1rem;
+        }
+
+        .status-text {
+            text-align: center;
+            color: #ffd700;
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+            font-style: italic;
+        }
+
+        .results-section {
+            display: none;
+            background: rgba(58, 58, 85, 0.6);
+            border-radius: 8px;
+            padding: 2rem;
+        }
+
+        .results-section h2 {
+            color: #ffd700;
+            margin-bottom: 1rem;
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin: 1.5rem 0;
+        }
+
+        .stat-card {
+            background: rgba(30, 30, 46, 0.8);
+            padding: 1.5rem;
+            border-radius: 8px;
+            text-align: center;
+            border-left: 4px solid #5a67d8;
+        }
+
+        .stat-label {
+            color: #a0aec0;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-value {
+            color: #ffd700;
+            font-size: 2rem;
+            font-weight: 700;
+        }
+
+        .download-button {
+            display: inline-block;
+            padding: 1rem 2rem;
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+            margin-top: 1.5rem;
+            width: 100%;
+        }
+
+        .download-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(72, 187, 120, 0.4);
+        }
+
+        .info-box {
+            background: rgba(90, 103, 216, 0.2);
+            border-left: 4px solid #5a67d8;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 4px;
+        }
+
+        .info-box p {
+            margin-bottom: 0.5rem;
+            line-height: 1.6;
+        }
+
+        .error-box {
+            background: rgba(245, 101, 101, 0.2);
+            border-left: 4px solid #f56565;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .success-icon {
+            font-size: 4rem;
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔮 MTG Collection Enricher</h1>
+        <p class="subtitle">Enhance your collection with Scryfall data</p>
+
+        <div class="upload-section" id="uploadSection">
+            <h2>Step 1: Upload Your Collection</h2>
+            <p>Upload your Untapped.gg or MTG Arena collection CSV file</p>
+            <label for="csvUpload" class="file-input-label">
+                📁 Choose CSV File
+            </label>
+            <input type="file" id="csvUpload" accept=".csv">
+            <div class="info-box">
+                <p><strong>What this tool does:</strong></p>
+                <p>✅ Fetches complete card data from Scryfall API</p>
+                <p>✅ Adds card types, legendary status, mana costs</p>
+                <p>✅ Filters to ONLY cards you own (Count > 0)</p>
+                <p>✅ Generates a new enriched CSV file</p>
+                <p>✅ Use the new file with the deck builder!</p>
+            </div>
+        </div>
+
+        <div class="progress-section" id="progressSection">
+            <h2>Enriching Your Collection...</h2>
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="progressBar">0%</div>
+            </div>
+            <p class="progress-text" id="progressText">Starting enrichment...</p>
+            <p class="status-text" id="statusText">Fetching card data from Scryfall...</p>
+        </div>
+
+        <div class="error-box" id="errorBox">
+            <strong>❌ Error:</strong> <span id="errorMessage"></span>
+        </div>
+
+        <div class="results-section" id="resultsSection">
+            <div class="success-icon">✅</div>
+            <h2>Enrichment Complete!</h2>
+            
+            <div class="stat-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Total Cards</div>
+                    <div class="stat-value" id="totalCards">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Legendary Creatures</div>
+                    <div class="stat-value" id="legendaryCount">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Enriched Fields</div>
+                    <div class="stat-value">15+</div>
+                </div>
+            </div>
+
+            <div class="info-box">
+                <p><strong>Your new CSV includes:</strong></p>
+                <p>📝 Original data: Name, Set, Color, Rarity, Count</p>
+                <p>🆕 Card Type (e.g., "Legendary Creature — Sliver")</p>
+                <p>🆕 Legendary Status (true/false)</p>
+                <p>🆕 Mana Cost & CMC</p>
+                <p>🆕 Color Identity</p>
+                <p>🆕 Oracle Text</p>
+                <p>🆕 Power/Toughness</p>
+                <p>🆕 And more!</p>
+            </div>
+
+            <button class="download-button" id="downloadButton">
+                ⬇️ Download Enriched Collection CSV
+            </button>
+
+            <div class="info-box" style="margin-top: 2rem;">
+                <p><strong>Next Steps:</strong></p>
+                <p>1. Download the enriched CSV file</p>
+                <p>2. Go back to the deck builder</p>
+                <p>3. Upload the enriched file instead of the original</p>
+                <p>4. Enjoy accurate deck building! 🎴</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="enricher.js"></script>
+</body>
+</html>
