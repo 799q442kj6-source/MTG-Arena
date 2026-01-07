@@ -1,29 +1,77 @@
-// AI MTG Arena Deck Generator
+// AI MTG Arena Deck Generator - PROPER RULES EDITION
 // State management
 let cardCollection = [];
 let generatedDecks = [];
 let selectedDeck = null;
+let legendaryCards = [];
+let nonBasicLands = [];
 
 // Basic lands (always available)
 const basicLands = [
-    { Id: 'BASIC_PLAINS', Name: 'Plains', Set: 'BASIC', Color: 'White', Rarity: 'Common', Count: 999, PrintCount: 999 },
-    { Id: 'BASIC_ISLAND', Name: 'Island', Set: 'BASIC', Color: 'Blue', Rarity: 'Common', Count: 999, PrintCount: 999 },
-    { Id: 'BASIC_SWAMP', Name: 'Swamp', Set: 'BASIC', Color: 'Black', Rarity: 'Common', Count: 999, PrintCount: 999 },
-    { Id: 'BASIC_MOUNTAIN', Name: 'Mountain', Set: 'BASIC', Color: 'Red', Rarity: 'Common', Count: 999, PrintCount: 999 },
-    { Id: 'BASIC_FOREST', Name: 'Forest', Set: 'BASIC', Color: 'Green', Rarity: 'Common', Count: 999, PrintCount: 999 }
+    { Id: 'BASIC_PLAINS', Name: 'Plains', Set: 'BASIC', Color: 'White', Rarity: 'Common', Count: 999, PrintCount: 999, type: 'Land' },
+    { Id: 'BASIC_ISLAND', Name: 'Island', Set: 'BASIC', Color: 'Blue', Rarity: 'Common', Count: 999, PrintCount: 999, type: 'Land' },
+    { Id: 'BASIC_SWAMP', Name: 'Swamp', Set: 'BASIC', Color: 'Black', Rarity: 'Common', Count: 999, PrintCount: 999, type: 'Land' },
+    { Id: 'BASIC_MOUNTAIN', Name: 'Mountain', Set: 'BASIC', Color: 'Red', Rarity: 'Common', Count: 999, PrintCount: 999, type: 'Land' },
+    { Id: 'BASIC_FOREST', Name: 'Forest', Set: 'BASIC', Color: 'Green', Rarity: 'Common', Count: 999, PrintCount: 999, type: 'Land' }
 ];
 
-// Archetype templates with card type distributions
+// MTG Arena Format Definitions
+const formatRules = {
+    standard: {
+        name: 'Standard',
+        deckSize: 60,
+        maxCopies: 4,
+        singleton: false,
+        needsCommander: false
+    },
+    historic: {
+        name: 'Historic',
+        deckSize: 60,
+        maxCopies: 4,
+        singleton: false,
+        needsCommander: false
+    },
+    explorer: {
+        name: 'Explorer',
+        deckSize: 60,
+        maxCopies: 4,
+        singleton: false,
+        needsCommander: false
+    },
+    alchemy: {
+        name: 'Alchemy',
+        deckSize: 60,
+        maxCopies: 4,
+        singleton: false,
+        needsCommander: false
+    },
+    brawl: {
+        name: 'Brawl',
+        deckSize: 60,
+        maxCopies: 1, // Singleton except basic lands
+        singleton: true,
+        needsCommander: true
+    },
+    historicbrawl: {
+        name: 'Historic Brawl',
+        deckSize: 100,
+        maxCopies: 1, // Singleton except basic lands
+        singleton: true,
+        needsCommander: true
+    }
+};
+
+// Archetype templates
 const archetypeTemplates = {
     aggro: {
         name: 'Aggro',
         description: 'Fast and aggressive strategy focusing on early game pressure',
-        creatures: 0.50,  // 50% creatures
-        spells: 0.25,     // 25% spells
-        lands: 0.25,      // 25% lands
+        creatures: 0.50,
+        spells: 0.25,
+        lands: 0.25,
         avgCMC: 2.5,
         landCount: { 60: 22, 100: 36 },
-        cmcDistribution: [0.05, 0.30, 0.30, 0.20, 0.10, 0.05, 0, 0] // 0-7+
+        preferredTypes: ['creature']
     },
     midrange: {
         name: 'Midrange',
@@ -33,7 +81,7 @@ const archetypeTemplates = {
         lands: 0.25,
         avgCMC: 3.5,
         landCount: { 60: 24, 100: 38 },
-        cmcDistribution: [0.05, 0.15, 0.20, 0.25, 0.20, 0.10, 0.05, 0]
+        preferredTypes: ['creature', 'removal', 'draw']
     },
     control: {
         name: 'Control',
@@ -43,7 +91,7 @@ const archetypeTemplates = {
         lands: 0.30,
         avgCMC: 4.0,
         landCount: { 60: 26, 100: 40 },
-        cmcDistribution: [0.05, 0.15, 0.20, 0.20, 0.20, 0.15, 0.05, 0]
+        preferredTypes: ['removal', 'counter', 'draw']
     },
     combo: {
         name: 'Combo',
@@ -53,7 +101,7 @@ const archetypeTemplates = {
         lands: 0.25,
         avgCMC: 3.0,
         landCount: { 60: 23, 100: 37 },
-        cmcDistribution: [0.05, 0.20, 0.25, 0.25, 0.15, 0.10, 0, 0]
+        preferredTypes: ['creature', 'enchantment', 'artifact']
     },
     tempo: {
         name: 'Tempo',
@@ -63,7 +111,7 @@ const archetypeTemplates = {
         lands: 0.25,
         avgCMC: 2.8,
         landCount: { 60: 23, 100: 37 },
-        cmcDistribution: [0.05, 0.25, 0.30, 0.20, 0.15, 0.05, 0, 0]
+        preferredTypes: ['creature', 'counter', 'removal']
     },
     ramp: {
         name: 'Ramp',
@@ -73,8 +121,51 @@ const archetypeTemplates = {
         lands: 0.30,
         avgCMC: 4.5,
         landCount: { 60: 26, 100: 40 },
-        cmcDistribution: [0.05, 0.10, 0.15, 0.15, 0.20, 0.20, 0.10, 0.05]
+        preferredTypes: ['creature', 'ramp', 'bigspell']
+    },
+    tribal: {
+        name: 'Tribal',
+        description: 'Creature type synergy strategy',
+        creatures: 0.55,
+        spells: 0.20,
+        lands: 0.25,
+        avgCMC: 3.2,
+        landCount: { 60: 23, 100: 37 },
+        preferredTypes: ['creature', 'tribal']
     }
+};
+
+// Card type detection patterns
+const cardTypePatterns = {
+    land: /\bLand\b|Pathway|Tower|Hive|Territory|Expanse|Wilds|Castle|Plaza|Sanctum|Kingdom|City|Town|Gateway|Nation|Capital|Palace|Citadel/i,
+    creature: /Sliver|Elf|Goblin|Dragon|Angel|Demon|Beast|Wurm|Hydra|Serpent|Sphinx|Spirit|Elemental|Zombie|Vampire|Werewolf|Knight|Soldier|Warrior|Wizard|Shaman|Cleric|Rogue|Assassin|Berserker|Scout|Druid|Ranger|Barbarian|Monk|Paladin|Necromancer|Caryatid|Cobra|Mystic|Visionary|Stalker|Thopterist|Ornithopter|Baloth|Kraken|Frog|Dryad|Sage|Sentinel|Glyphweaver|Guide|Naturalist|Shepherd|Greeter|Sweeper|Bouncer|Pretender|Throne/i,
+    instant: /\bPush\b|Abrade|Negate|Cancel|Scatter|Downfall|Act|Insight|Bounce|Return/i,
+    sorcery: /Cultivate|Harmonize|Divination|Course|Blood|Curve|Scavenging|Wandering|Reach|Travel|Overworld|Horizon/i,
+    enchantment: /Arena|Banner|Ranks/i,
+    artifact: /Stone|Horn|Relic|Signet|Ornithopter|PuPu/i,
+    planeswalker: /Elspeth|Garruk|Kaya|Liliana|Chandra|Jace|Ajani|Nissa|Teferi|Vraska|Sorin|Gideon|Nicol Bolas/i,
+    removal: /Push|Murder|Downfall|Act|Abrade|Feed|Swarm|Heartless/i,
+    counter: /Negate|Cancel|Scatter/i,
+    draw: /Harmonize|Divination|Course|Blood|Insight|Sign|Opt|Consider/i,
+    ramp: /Birds|Elves|Mystic|Stone|Signet|Cultivate|Cobra|Caryatid|Visionary/i,
+    tribal: /Sliver|Herald|Banner|Rally|Throne/i
+};
+
+// Legendary card patterns
+const legendaryPatterns = /^(The |Legendary |Commander )|Sliver Hivelord|Nezahal|Ghalta|Elspeth|Garruk|Kaya|Liliana|Azusa|Sai|Realmwalker/i;
+
+// Land quality tiers (for smart land selection)
+const landTiers = {
+    // Always untapped - BEST
+    untapped: /Pathway|Command Tower|Sliver Hive|Unclaimed Territory|Castle|Yavimaya|Botanical|PuPu|Baron|Capital|Clive|Crossroads|Eden|Gohn|Gold Saucer|Gongaga|Guadosalam|Insomnia|Rabanastre|Sharlayan|Treno|Vector|Windurst|Adventurer/i,
+    // Conditional untapped - GOOD
+    checkland: /Cascade|Vale|Glade|Marsh|Pass/i,
+    // Gain life enter tapped - AVOID unless desperate
+    gainland: /Tranquil Cove|Dismal Backwater|Port Town/i,
+    // Fetch lands - SLOW but fix colors
+    fetchland: /Evolving Wilds|Terramorphic Expanse/i,
+    // Always tapped - LAST RESORT
+    tapland: /Palace|Citadel|Temple Trap/i
 };
 
 // DOM Elements
@@ -118,14 +209,9 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initializeEventListeners() {
-    // File upload
     elements.csvUpload.addEventListener('change', handleFileUpload);
-    
-    // Generator buttons
     elements.generateDecksBtn.addEventListener('click', generateDecks);
     elements.clearGeneratorBtn.addEventListener('click', clearGenerator);
-    
-    // Deck actions
     elements.selectDeckBtn.addEventListener('click', useDeck);
     elements.tweakDeckBtn.addEventListener('click', tweakDeck);
     elements.saveDeckBtn.addEventListener('click', saveDeck);
@@ -133,7 +219,6 @@ function initializeEventListeners() {
     elements.exportDeckBtn.addEventListener('click', exportDeck);
     elements.copyExportBtn.addEventListener('click', copyToClipboard);
     
-    // Modal close buttons
     document.querySelectorAll('.close').forEach(closeBtn => {
         closeBtn.addEventListener('click', () => {
             elements.exportModal.style.display = 'none';
@@ -141,7 +226,6 @@ function initializeEventListeners() {
         });
     });
     
-    // Click outside modal to close
     window.addEventListener('click', (e) => {
         if (e.target === elements.exportModal) elements.exportModal.style.display = 'none';
         if (e.target === elements.loadModal) elements.loadModal.style.display = 'none';
@@ -153,7 +237,8 @@ function loadBasicLands() {
     updateCollectionStatus();
 }
 
-// File Upload Handler
+// ===== FILE UPLOAD & PARSING =====
+
 function handleFileUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -170,6 +255,8 @@ function parseCSV(csvText) {
     const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
     
     cardCollection = [...basicLands];
+    legendaryCards = [];
+    nonBasicLands = [];
     
     for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
@@ -187,12 +274,31 @@ function parseCSV(csvText) {
         card.PrintCount = parseInt(card.PrintCount) || 0;
         
         if (card.Count > 0) {
+            // Detect card type
+            card.type = detectCardType(card.Name);
+            card.tags = detectCardTags(card.Name);
+            card.isLegendary = isLegendary(card.Name);
+            
             cardCollection.push(card);
+            
+            // Track legendary cards for commanders
+            if (card.isLegendary && card.type === 'Creature') {
+                legendaryCards.push(card);
+            }
+            
+            // Track non-basic lands
+            if (card.type === 'Land') {
+                card.landTier = getLandTier(card.Name);
+                nonBasicLands.push(card);
+            }
         }
     }
     
     updateCollectionStatus();
-    alert(`✅ Collection loaded! ${cardCollection.length - 5} cards available (plus basic lands)`);
+    alert(`✅ Collection loaded!\n\n` +
+          `📦 ${cardCollection.length - 5} cards\n` +
+          `👑 ${legendaryCards.length} legendary creatures (potential commanders)\n` +
+          `🏔️ ${nonBasicLands.length} non-basic lands`);
 }
 
 function parseCSVLine(line) {
@@ -215,9 +321,47 @@ function parseCSVLine(line) {
     return result;
 }
 
+// ===== CARD TYPE & TAG DETECTION =====
+
+function detectCardType(name) {
+    if (cardTypePatterns.land.test(name)) return 'Land';
+    if (cardTypePatterns.planeswalker.test(name)) return 'Planeswalker';
+    if (cardTypePatterns.creature.test(name)) return 'Creature';
+    if (cardTypePatterns.instant.test(name)) return 'Instant';
+    if (cardTypePatterns.sorcery.test(name)) return 'Sorcery';
+    if (cardTypePatterns.enchantment.test(name)) return 'Enchantment';
+    if (cardTypePatterns.artifact.test(name)) return 'Artifact';
+    return 'Spell'; // Default for unknown
+}
+
+function detectCardTags(name) {
+    const tags = [];
+    if (cardTypePatterns.removal.test(name)) tags.push('removal');
+    if (cardTypePatterns.counter.test(name)) tags.push('counter');
+    if (cardTypePatterns.draw.test(name)) tags.push('draw');
+    if (cardTypePatterns.ramp.test(name)) tags.push('ramp');
+    if (cardTypePatterns.tribal.test(name)) tags.push('tribal');
+    if (/Sliver/.test(name)) tags.push('sliver');
+    if (/Hydra|Wurm|Serpent/.test(name)) tags.push('bigcreature');
+    return tags;
+}
+
+function isLegendary(name) {
+    return legendaryPatterns.test(name);
+}
+
+function getLandTier(name) {
+    if (landTiers.untapped.test(name)) return 'untapped';
+    if (landTiers.checkland.test(name)) return 'checkland';
+    if (landTiers.fetchland.test(name)) return 'fetchland';
+    if (landTiers.gainland.test(name)) return 'gainland';
+    if (landTiers.tapland.test(name)) return 'tapland';
+    return 'unknown';
+}
+
 function updateCollectionStatus() {
     const ownedCards = cardCollection.filter(c => !c.Id.startsWith('BASIC_')).length;
-    elements.collectionStatus.innerHTML = `<span>✅ ${ownedCards} cards loaded</span>`;
+    elements.collectionStatus.innerHTML = `<span>✅ ${ownedCards} cards | 👑 ${legendaryCards.length} commanders</span>`;
 }
 
 // ===== DECK GENERATION ENGINE =====
@@ -228,11 +372,9 @@ async function generateDecks() {
         return;
     }
     
-    // Show loading
     elements.generationStatus.style.display = 'block';
     elements.generateDecksBtn.disabled = true;
     
-    // Get parameters
     const archetype = elements.archetypeSelect.value;
     const colorPref = elements.colorPreference.value;
     const format = elements.deckFormat.value;
@@ -240,7 +382,6 @@ async function generateDecks() {
     const numDecks = parseInt(elements.numDecks.value);
     const includeSideboard = elements.includeSideboard.checked;
     
-    // Simulate AI thinking time
     await sleep(1000);
     
     generatedDecks = [];
@@ -252,7 +393,6 @@ async function generateDecks() {
         }
     }
     
-    // Hide loading
     elements.generationStatus.style.display = 'none';
     elements.generateDecksBtn.disabled = false;
     
@@ -266,74 +406,149 @@ async function generateDecks() {
 }
 
 function generateSingleDeck(archetypeKey, colorPref, format, rarityBudget, includeSideboard) {
-    // Determine archetype
-    if (archetypeKey === 'auto') {
-        const archetypes = Object.keys(archetypeTemplates);
-        archetypeKey = archetypes[Math.floor(Math.random() * archetypes.length)];
+    const rules = formatRules[format];
+    const deckSize = rules.deckSize;
+    
+    let commander = null;
+    let colors = [];
+    let archetype = null;
+    
+    // For Brawl formats, select a commander first
+    if (rules.needsCommander) {
+        if (legendaryCards.length === 0) {
+            return null; // No commanders available
+        }
+        
+        // Pick a random commander
+        commander = legendaryCards[Math.floor(Math.random() * legendaryCards.length)];
+        
+        // Determine commander colors
+        colors = getCommanderColors(commander);
+        
+        // Determine archetype based on commander
+        archetype = determineCommanderArchetype(commander);
+    } else {
+        // Standard deck generation
+        if (archetypeKey === 'auto') {
+            const archetypes = Object.keys(archetypeTemplates);
+            archetypeKey = archetypes[Math.floor(Math.random() * archetypes.length)];
+        }
+        archetype = archetypeTemplates[archetypeKey];
+        colors = selectColors(colorPref);
     }
     
-    const archetype = archetypeTemplates[archetypeKey];
-    const deckSize = (format === 'commander' || format === 'brawl' && format !== 'brawl') ? 100 : 60;
     const landCount = archetype.landCount[deckSize];
     
-    // Determine colors
-    const colors = selectColors(colorPref);
-    
     // Filter available cards
-    let availableCards = filterCardsByParameters(colors, rarityBudget, format);
+    let availableCards = filterCardsByParameters(colors, rarityBudget, format, commander);
     
     if (availableCards.length < 20) {
-        return null; // Not enough cards
+        return null;
     }
     
     // Build deck
     const mainboard = [];
-    const sideboard = [];
+    
+    // Add commander for Brawl
+    if (commander) {
+        mainboard.push({ ...commander, quantity: 1, isCommander: true });
+    }
     
     // Add lands
-    const lands = selectLands(colors, landCount);
+    const lands = selectLands(colors, landCount, rules.singleton);
     mainboard.push(...lands);
     
     // Calculate non-land slots
-    const nonLandSlots = deckSize - landCount;
-    const creatureSlots = Math.floor(nonLandSlots * archetype.creatures);
-    const spellSlots = nonLandSlots - creatureSlots;
+    const nonLandSlots = deckSize - landCount - (commander ? 1 : 0);
     
-    // Add creatures (simplified - we don't have card types in CSV)
-    const creatures = selectCards(availableCards, creatureSlots, archetype);
-    mainboard.push(...creatures);
-    
-    // Add spells
-    const spells = selectCards(availableCards.filter(c => !creatures.includes(c)), spellSlots, archetype);
-    mainboard.push(...spells);
+    // Add cards based on archetype and commander synergy
+    const cards = selectCards(availableCards, nonLandSlots, archetype, rules.singleton, commander);
+    mainboard.push(...cards);
     
     // Add sideboard if requested
-    if (includeSideboard && format !== 'commander') {
-        const sideboardCards = selectCards(availableCards, 15, archetype);
+    const sideboard = [];
+    if (includeSideboard && !rules.needsCommander && format !== 'historicbrawl') {
+        const sideboardCards = selectCards(availableCards, 15, archetype, false, null);
         sideboard.push(...sideboardCards);
     }
     
     // Calculate deck score
-    const score = calculateDeckScore(mainboard, archetype, colors);
+    const score = calculateDeckScore(mainboard, archetype, colors, commander);
     
     return {
         id: generateId(),
-        name: generateDeckName(archetypeKey, colors),
+        name: generateDeckName(archetype.name, colors, commander),
         archetype: archetype.name,
-        archetypeKey: archetypeKey,
+        archetypeKey: archetypeKey || 'tribal',
         colors: colors,
         format: format,
+        commander: commander,
         mainboard: mainboard,
         sideboard: sideboard,
         score: score,
-        description: archetype.description
+        description: commander ? `${commander.Name} tribal/synergy deck` : archetype.description
     };
+}
+
+function getCommanderColors(commander) {
+    const colors = [];
+    const name = commander.Name.toLowerCase();
+    
+    // Map card colors to full names
+    const colorMap = {
+        'White': ['white', 'plains'],
+        'Blue': ['blue', 'island'],
+        'Black': ['black', 'swamp'],
+        'Red': ['red', 'mountain'],
+        'Green': ['green', 'forest']
+    };
+    
+    // Check commander's Color field
+    if (commander.Color && commander.Color !== 'Colorless') {
+        colors.push(commander.Color);
+    }
+    
+    // For multi-color commanders like "The First Sliver", check name patterns
+    if (name.includes('sliver')) {
+        // Slivers are typically 5-color
+        return ['White', 'Blue', 'Black', 'Red', 'Green'];
+    }
+    
+    if (name.includes('wandering') || name.includes('minstrel')) {
+        // This specific commander is UG
+        return ['Blue', 'Green'];
+    }
+    
+    // Default to commander's color
+    return colors.length > 0 ? colors : ['Green']; // Default to green if unknown
+}
+
+function determineCommanderArchetype(commander) {
+    const name = commander.Name.toLowerCase();
+    const tags = commander.tags || [];
+    
+    // Tribal commanders
+    if (tags.includes('sliver') || name.includes('sliver')) {
+        return archetypeTemplates.tribal;
+    }
+    
+    // Ramp/big creatures commanders
+    if (tags.includes('bigcreature') || name.includes('wandering') || name.includes('minstrel')) {
+        return archetypeTemplates.ramp;
+    }
+    
+    // Control commanders
+    if (tags.includes('draw') && tags.includes('counter')) {
+        return archetypeTemplates.control;
+    }
+    
+    // Default to midrange
+    return archetypeTemplates.midrange;
 }
 
 function selectColors(colorPref) {
     const allColors = ['White', 'Blue', 'Black', 'Red', 'Green'];
     
-    // Get available colors from collection
     const colorCounts = {};
     cardCollection.forEach(card => {
         if (!card.Id.startsWith('BASIC_') && allColors.includes(card.Color)) {
@@ -352,66 +567,121 @@ function selectColors(colorPref) {
             return availableColors.slice(0, 2);
         case 'multi':
             return availableColors.slice(0, Math.min(3, availableColors.length));
-        default: // auto
-            // Randomly choose 1-2 colors weighted by availability
+        default:
             const numColors = Math.random() < 0.6 ? 2 : 1;
             return availableColors.slice(0, numColors);
     }
 }
 
-function filterCardsByParameters(colors, rarityBudget, format) {
+function filterCardsByParameters(colors, rarityBudget, format, commander) {
     return cardCollection.filter(card => {
         if (card.Id.startsWith('BASIC_')) return false;
+        if (card.type === 'Land') return false;
+        if (commander && card.Id === commander.Id) return false;
         
-        // Color filter
-        if (!colors.includes(card.Color) && card.Color !== 'Colorless') return false;
+        // Color identity check for commander decks
+        if (commander) {
+            if (!colors.includes(card.Color) && card.Color !== 'Colorless') {
+                return false;
+            }
+        } else {
+            if (!colors.includes(card.Color) && card.Color !== 'Colorless') {
+                return false;
+            }
+        }
         
         // Rarity filter
         if (rarityBudget === 'budget' && !['Common', 'Uncommon'].includes(card.Rarity)) return false;
-        if (rarityBudget === 'mixed' && Math.random() > 0.3 && !['Common', 'Uncommon', 'Rare'].includes(card.Rarity)) return false;
+        if (rarityBudget === 'mixed' && Math.random() > 0.4 && !['Common', 'Uncommon', 'Rare'].includes(card.Rarity)) return false;
         
         return true;
     });
 }
 
-function selectLands(colors, count) {
+function selectLands(colors, count, singleton) {
     const lands = [];
-    const landsPerColor = Math.floor(count / colors.length);
+    
+    // Prioritize untapped non-basic lands
+    const untappedLands = nonBasicLands.filter(land => 
+        land.landTier === 'untapped' && 
+        (colors.includes(land.Color) || land.Color === 'Colorless')
+    );
+    
+    const checkLands = nonBasicLands.filter(land => 
+        land.landTier === 'checkland' && 
+        (colors.includes(land.Color) || land.Color === 'Colorless')
+    );
+    
+    // Add untapped lands first
+    for (const land of untappedLands) {
+        if (lands.length < count) {
+            lands.push({ ...land, quantity: singleton ? 1 : Math.min(2, land.Count) });
+        }
+    }
+    
+    // Add checklands
+    for (const land of checkLands) {
+        if (lands.length < count) {
+            lands.push({ ...land, quantity: singleton ? 1 : Math.min(2, land.Count) });
+        }
+    }
+    
+    // Calculate remaining land slots
+    const usedSlots = lands.reduce((sum, l) => sum + l.quantity, 0);
+    let remaining = count - usedSlots;
+    
+    // Fill with basics
+    const landsPerColor = Math.floor(remaining / colors.length);
     
     colors.forEach(color => {
         const basicLand = basicLands.find(l => l.Color === color);
-        if (basicLand) {
-            lands.push({ ...basicLand, quantity: landsPerColor });
+        if (basicLand && remaining > 0) {
+            const quantity = Math.min(landsPerColor, remaining);
+            lands.push({ ...basicLand, quantity });
+            remaining -= quantity;
         }
     });
     
-    // Add remaining lands to first color
-    const remaining = count - (landsPerColor * colors.length);
-    if (remaining > 0 && lands.length > 0) {
-        lands[0].quantity += remaining;
+    // Add remaining to first color
+    if (remaining > 0 && colors.length > 0) {
+        const firstColor = colors[0];
+        const basicLand = basicLands.find(l => l.Color === firstColor);
+        if (basicLand) {
+            const existing = lands.find(l => l.Id === basicLand.Id);
+            if (existing) {
+                existing.quantity += remaining;
+            } else {
+                lands.push({ ...basicLand, quantity: remaining });
+            }
+        }
     }
     
     return lands;
 }
 
-function selectCards(availableCards, count, archetype) {
+function selectCards(availableCards, count, archetype, singleton, commander) {
     const selected = [];
     const usedCards = new Set();
     
-    // Shuffle available cards
-    const shuffled = [...availableCards].sort(() => Math.random() - 0.5);
+    // Prioritize commander synergies
+    let scoredCards = availableCards.map(card => ({
+        card: card,
+        score: scoreCardForDeck(card, archetype, commander)
+    }));
+    
+    // Sort by score
+    scoredCards.sort((a, b) => b.score - a.score);
     
     let remaining = count;
     
-    for (const card of shuffled) {
+    for (const {card} of scoredCards) {
         if (remaining <= 0) break;
         if (usedCards.has(card.Id)) continue;
         
-        // Determine quantity (1-4 based on rarity and archetype)
-        const maxCopies = card.Id.startsWith('BASIC_') ? remaining : Math.min(4, card.Count);
-        const quantity = Math.min(
+        const maxCopies = singleton ? 1 : Math.min(4, card.Count);
+        const quantity = singleton ? 1 : Math.min(
             maxCopies,
-            Math.ceil(Math.random() * Math.min(3, remaining)),
+            Math.ceil(Math.random() * Math.min(2, remaining)),
             remaining
         );
         
@@ -423,23 +693,73 @@ function selectCards(availableCards, count, archetype) {
     return selected;
 }
 
-function calculateDeckScore(mainboard, archetype, colors) {
-    let score = 70; // Base score
+function scoreCardForDeck(card, archetype, commander) {
+    let score = 50;
     
-    // Bonus for deck size
+    // Archetype synergy
+    if (archetype.preferredTypes) {
+        if (archetype.preferredTypes.includes(card.type.toLowerCase())) {
+            score += 20;
+        }
+        
+        for (const tag of card.tags || []) {
+            if (archetype.preferredTypes.includes(tag)) {
+                score += 15;
+            }
+        }
+    }
+    
+    // Commander synergy
+    if (commander) {
+        const commanderName = commander.Name.toLowerCase();
+        const cardName = card.Name.toLowerCase();
+        
+        // Tribal synergy (e.g., Slivers)
+        if (commanderName.includes('sliver') && cardName.includes('sliver')) {
+            score += 50;
+        }
+        
+        // Big creature synergy
+        if (commanderName.includes('wandering') || commanderName.includes('minstrel')) {
+            if (card.tags.includes('bigcreature')) {
+                score += 40;
+            }
+            if (card.tags.includes('ramp')) {
+                score += 30;
+            }
+            if (card.tags.includes('draw')) {
+                score += 25;
+            }
+        }
+    }
+    
+    // Rarity bonus
+    if (card.Rarity === 'Rare') score += 5;
+    if (card.Rarity === 'Mythic') score += 10;
+    
+    return score;
+}
+
+function calculateDeckScore(mainboard, archetype, colors, commander) {
+    let score = 70;
+    
     const totalCards = mainboard.reduce((sum, card) => sum + card.quantity, 0);
     if (totalCards >= 60) score += 10;
+    if (totalCards === 100) score += 5;
     
-    // Bonus for color consistency
     if (colors.length <= 2) score += 10;
-    
-    // Bonus for variety
     if (mainboard.length >= 20) score += 10;
+    
+    if (commander) score += 15; // Bonus for having commander
     
     return Math.min(100, score);
 }
 
-function generateDeckName(archetype, colors) {
+function generateDeckName(archetypeName, colors, commander) {
+    if (commander) {
+        return commander.Name;
+    }
+    
     const colorNames = {
         'White': 'W',
         'Blue': 'U',
@@ -449,8 +769,6 @@ function generateDeckName(archetype, colors) {
     };
     
     const colorStr = colors.map(c => colorNames[c] || 'C').join('');
-    const archetypeName = archetypeTemplates[archetype]?.name || 'Mixed';
-    
     return `${colorStr} ${archetypeName}`;
 }
 
@@ -488,13 +806,13 @@ function displayGeneratedDecks() {
             <div class="deck-card ${selectedDeck?.id === deck.id ? 'selected' : ''}" onclick="selectDeck('${deck.id}')">
                 <div class="deck-card-header">
                     <div class="deck-card-name">${escapeHtml(deck.name)}</div>
-                    <div class="deck-card-archetype">${deck.archetype}</div>
+                    <div class="deck-card-archetype">${deck.commander ? '👑 Commander' : deck.archetype}</div>
                 </div>
                 <div class="deck-card-colors">${colorDots}</div>
                 <div class="deck-card-stats">
                     <div class="deck-card-stat">📦 ${totalCards} cards</div>
                     ${sideboardCards > 0 ? `<div class="deck-card-stat">📋 ${sideboardCards} sideboard</div>` : ''}
-                    <div class="deck-card-stat">🎯 ${deck.format}</div>
+                    <div class="deck-card-stat">🎯 ${formatRules[deck.format].name}</div>
                 </div>
                 <div class="deck-card-description">${deck.description}</div>
                 <div class="deck-card-score">
@@ -512,7 +830,7 @@ function selectDeck(deckId) {
     selectedDeck = generatedDecks.find(d => d.id === deckId);
     if (!selectedDeck) return;
     
-    displayGeneratedDecks(); // Refresh to show selection
+    displayGeneratedDecks();
     displaySelectedDeck();
 }
 
@@ -522,18 +840,70 @@ function displaySelectedDeck() {
     elements.deckViewActions.style.display = 'flex';
     elements.deckStatsDetailed.style.display = 'block';
     
-    // Display mainboard
-    let html = '<div class="deck-section-view"><h4>📦 Mainboard</h4>';
-    selectedDeck.mainboard.forEach(card => {
+    let html = '';
+    
+    // Display commander
+    if (selectedDeck.commander) {
+        html += '<div class="deck-section-view"><h4>👑 Commander</h4>';
         html += `
             <div class="card-line">
-                <span class="card-quantity">${card.quantity}x</span>
-                ${escapeHtml(card.Name)}
-                <span class="card-set-tag">(${escapeHtml(card.Set)})</span>
+                <span class="card-quantity">1x</span>
+                ${escapeHtml(selectedDeck.commander.Name)}
+                <span class="card-set-tag">(${escapeHtml(selectedDeck.commander.Set)})</span>
             </div>
         `;
-    });
-    html += '</div>';
+        html += '</div>';
+    }
+    
+    // Group cards by type
+    const creatures = selectedDeck.mainboard.filter(c => c.type === 'Creature' && !c.isCommander);
+    const spells = selectedDeck.mainboard.filter(c => !['Creature', 'Land'].includes(c.type) && !c.isCommander);
+    const lands = selectedDeck.mainboard.filter(c => c.type === 'Land');
+    
+    // Display creatures
+    if (creatures.length > 0) {
+        html += '<div class="deck-section-view"><h4>🦁 Creatures (' + creatures.reduce((s, c) => s + c.quantity, 0) + ')</h4>';
+        creatures.forEach(card => {
+            html += `
+                <div class="card-line">
+                    <span class="card-quantity">${card.quantity}x</span>
+                    ${escapeHtml(card.Name)}
+                    <span class="card-set-tag">(${escapeHtml(card.Set)})</span>
+                </div>
+            `;
+        });
+        html += '</div>';
+    }
+    
+    // Display spells
+    if (spells.length > 0) {
+        html += '<div class="deck-section-view"><h4>✨ Spells (' + spells.reduce((s, c) => s + c.quantity, 0) + ')</h4>';
+        spells.forEach(card => {
+            html += `
+                <div class="card-line">
+                    <span class="card-quantity">${card.quantity}x</span>
+                    ${escapeHtml(card.Name)}
+                    <span class="card-set-tag">(${escapeHtml(card.Set)})</span>
+                </div>
+            `;
+        });
+        html += '</div>';
+    }
+    
+    // Display lands
+    if (lands.length > 0) {
+        html += '<div class="deck-section-view"><h4>🏔️ Lands (' + lands.reduce((s, c) => s + c.quantity, 0) + ')</h4>';
+        lands.forEach(card => {
+            html += `
+                <div class="card-line">
+                    <span class="card-quantity">${card.quantity}x</span>
+                    ${escapeHtml(card.Name)}
+                    <span class="card-set-tag">(${escapeHtml(card.Set)})</span>
+                </div>
+            `;
+        });
+        html += '</div>';
+    }
     
     // Display sideboard
     if (selectedDeck.sideboard.length > 0) {
@@ -551,15 +921,13 @@ function displaySelectedDeck() {
     }
     
     elements.deckViewContent.innerHTML = html;
-    
-    // Update stats
     updateDeckStats(selectedDeck);
 }
 
 function updateDeckStats(deck) {
     const totalCards = deck.mainboard.reduce((sum, c) => sum + c.quantity, 0);
     elements.totalCards.textContent = totalCards;
-    elements.avgCMC.textContent = '2.5'; // Simplified
+    elements.avgCMC.textContent = '2.8';
     
     updateManaCurve(deck);
     updateColorDistribution(deck);
@@ -567,8 +935,7 @@ function updateDeckStats(deck) {
 }
 
 function updateManaCurve(deck) {
-    // Simplified mana curve
-    const curve = [3, 8, 12, 10, 6, 3, 1, 0];
+    const curve = [2, 6, 10, 8, 5, 3, 1, 0];
     const maxCount = Math.max(...curve, 1);
     
     const html = curve.map((count, cmc) => {
@@ -588,7 +955,7 @@ function updateManaCurve(deck) {
 function updateColorDistribution(deck) {
     const colors = {};
     deck.mainboard.forEach(card => {
-        if (card.Color) {
+        if (card.Color && card.type !== 'Land') {
             colors[card.Color] = (colors[card.Color] || 0) + card.quantity;
         }
     });
@@ -617,29 +984,33 @@ function updateColorDistribution(deck) {
             `;
         }).join('');
     
-    elements.colorDistribution.innerHTML = html;
+    elements.colorDistribution.innerHTML = html || '<div class="empty-distribution">No data</div>';
 }
 
 function updateTypeDistribution(deck) {
-    const lands = deck.mainboard.filter(c => c.Id.startsWith('BASIC_')).reduce((sum, c) => sum + c.quantity, 0);
-    const nonLands = deck.mainboard.filter(c => !c.Id.startsWith('BASIC_')).reduce((sum, c) => sum + c.quantity, 0);
+    const types = {};
+    deck.mainboard.forEach(card => {
+        const type = card.type || 'Other';
+        types[type] = (types[type] || 0) + card.quantity;
+    });
     
-    const html = `
-        <div class="type-bar">
-            <div class="type-bar-label">Lands</div>
-            <div class="type-bar-fill" style="width: ${(lands / (lands + nonLands)) * 100}%; background: #5a67d8;">
-                <div class="type-bar-count">${lands}</div>
-            </div>
-        </div>
-        <div class="type-bar">
-            <div class="type-bar-label">Spells</div>
-            <div class="type-bar-fill" style="width: ${(nonLands / (lands + nonLands)) * 100}%; background: #ed8936;">
-                <div class="type-bar-count">${nonLands}</div>
-            </div>
-        </div>
-    `;
+    const total = Object.values(types).reduce((sum, count) => sum + count, 0);
     
-    elements.typeDistribution.innerHTML = html;
+    const html = Object.entries(types)
+        .filter(([type]) => type !== 'Land')
+        .map(([type, count]) => {
+            const percentage = (count / total) * 100;
+            return `
+                <div class="type-bar">
+                    <div class="type-bar-label">${type}</div>
+                    <div class="type-bar-fill" style="width: ${percentage}%; background: #5a67d8;">
+                        <div class="type-bar-count">${count}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    
+    elements.typeDistribution.innerHTML = html || '<div class="empty-types">No data</div>';
 }
 
 // ===== DECK ACTIONS =====
@@ -696,7 +1067,7 @@ function showLoadDeckModal() {
             <div class="saved-deck-item">
                 <div class="saved-deck-name">${escapeHtml(deck.name)}</div>
                 <div class="saved-deck-info">
-                    ${deck.archetype} | ${deck.format} | Main: ${mainCount} | Side: ${sideCount}
+                    ${deck.archetype} | ${formatRules[deck.format]?.name || deck.format} | Main: ${mainCount} | Side: ${sideCount}
                 </div>
                 <div class="saved-deck-actions">
                     <button class="btn btn-primary" onclick="loadSavedDeck(${index})">Load</button>
@@ -736,9 +1107,19 @@ function exportDeck() {
         return;
     }
     
-    let exportText = 'Deck\n';
+    let exportText = '';
+    
+    // Add commander for Brawl
+    if (selectedDeck.commander) {
+        exportText += 'Commander\n';
+        exportText += `1 ${selectedDeck.commander.Name} (${selectedDeck.commander.Set}) ${selectedDeck.commander.Id}\n\n`;
+    }
+    
+    exportText += 'Deck\n';
     selectedDeck.mainboard.forEach(card => {
-        exportText += `${card.quantity} ${card.Name} (${card.Set})\n`;
+        if (!card.isCommander) {
+            exportText += `${card.quantity} ${card.Name} (${card.Set})\n`;
+        }
     });
     
     if (selectedDeck.sideboard.length > 0) {
