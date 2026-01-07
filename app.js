@@ -388,6 +388,12 @@ async function parseCSVAndEnrich(csvText) {
     const lines = csvText.split('\n');
     const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
     
+    // CHECK IF ALREADY ENRICHED
+    const isAlreadyEnriched = headers.includes('type') && 
+                             headers.includes('isLegendary') && 
+                             headers.includes('manaCost') &&
+                             headers.includes('scryfallId');
+    
     const rawCards = [];
     
     for (let i = 1; i < lines.length; i++) {
@@ -405,13 +411,56 @@ async function parseCSVAndEnrich(csvText) {
         card.Count = parseInt(card.Count) || 0;
         card.PrintCount = parseInt(card.PrintCount) || 0;
         
+        // Convert boolean strings to actual booleans if enriched
+        if (isAlreadyEnriched) {
+            card.isLegendary = card.isLegendary === 'true';
+            card.isCreature = card.isCreature === 'true';
+            card.isLand = card.isLand === 'true';
+            card.isInstant = card.isInstant === 'true';
+            card.isSorcery = card.isSorcery === 'true';
+            card.isArtifact = card.isArtifact === 'true';
+            card.isEnchantment = card.isEnchantment === 'true';
+            card.isPlaneswalker = card.isPlaneswalker === 'true';
+            card.cmc = parseFloat(card.cmc) || 0;
+        }
+        
         if (card.Count > 0) {
             rawCards.push(card);
         }
     }
     
-    // Show enrichment modal
     const totalCards = rawCards.length;
+    
+    // If already enriched, skip the enrichment step!
+    if (isAlreadyEnriched) {
+        alert(`✅ Collection loaded!\n\n` +
+              `📦 ${totalCards} cards (already enriched)\n` +
+              `🎉 Ready to generate decks!`);
+        
+        cardCollection = [...basicLands];
+        legendaryCards = [];
+        nonBasicLands = [];
+        
+        rawCards.forEach(card => {
+            cardCollection.push(card);
+            
+            // Track legendary creatures for commanders
+            if (card.isLegendary && (card.isCreature || card.isPlaneswalker)) {
+                legendaryCards.push(card);
+            }
+            
+            // Track non-basic lands
+            if (card.isLand) {
+                card.landTier = getLandTier(card.Name);
+                nonBasicLands.push(card);
+            }
+        });
+        
+        updateCollectionStatus();
+        return;
+    }
+    
+    // Show enrichment modal for non-enriched CSVs
     const message = `Found ${totalCards} cards in your collection.\n\n` +
                    `Would you like to enrich card data with Scryfall?\n\n` +
                    `This will fetch proper card types, legendary status, and mana costs.\n` +
