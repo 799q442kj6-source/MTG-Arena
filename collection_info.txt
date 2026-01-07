@@ -1,0 +1,51 @@
+MTG ARENA CARD COLLECTION - FILTERED DATA
+==========================================
+
+Original File: enriched_collection.csv
+- Total rows: 9,728 (including header)
+- Total cards: 9,727
+
+Filtered File: MTG Arena Card Collection.csv
+- Total rows: 5,433 (including header)
+- Cards owned (Count > 0): 5,432
+- Cards removed (Count = 0): 4,295
+
+Filter Applied: Count > 0 only
+
+Columns (25 total):
+1. Id - Arena card ID
+2. Name - Card name
+3. Set - Set code
+4. Color - Card color
+5. Rarity - Common/Uncommon/Rare/Mythic
+6. Count - Number owned (all > 0 in filtered file)
+7. PrintCount - Print count
+8. type - Card type from Scryfall
+9. isLegendary - Boolean
+10. isCreature - Boolean
+11. isLand - Boolean
+12. isInstant - Boolean
+13. isSorcery - Boolean
+14. isArtifact - Boolean
+15. isEnchantment - Boolean
+16. isPlaneswalker - Boolean
+17. manaCost - Mana cost string
+18. cmc - Converted mana cost
+19. colors - Card colors
+20. colorIdentity - Color identity
+21. power - Creature power
+22. toughness - Creature toughness
+23. oracleText - Card text
+24. scryfallId - Scryfall UUID
+25. imageUrl - Card image URL
+
+File Location: /home/user/webapp/MTG Arena Card Collection.csv
+File Size: 1.4 MB
+
+Usage:
+- Upload this file to the Deck Builder
+- All cards in this file are owned (Count > 0)
+- No need to check ownership - every card is available
+- Includes full Scryfall enrichment data
+
+Created: 2026-01-07
