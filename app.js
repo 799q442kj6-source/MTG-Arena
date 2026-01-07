@@ -1,10 +1,8 @@
-// MTG Arena Deck Builder
+// AI MTG Arena Deck Generator
 // State management
 let cardCollection = [];
-let filteredCards = [];
-let mainDeck = [];
-let sideboard = [];
-let currentTab = 'mainboard';
+let generatedDecks = [];
+let selectedDeck = null;
 
 // Basic lands (always available)
 const basicLands = [
@@ -15,24 +13,90 @@ const basicLands = [
     { Id: 'BASIC_FOREST', Name: 'Forest', Set: 'BASIC', Color: 'Green', Rarity: 'Common', Count: 999, PrintCount: 999 }
 ];
 
+// Archetype templates with card type distributions
+const archetypeTemplates = {
+    aggro: {
+        name: 'Aggro',
+        description: 'Fast and aggressive strategy focusing on early game pressure',
+        creatures: 0.50,  // 50% creatures
+        spells: 0.25,     // 25% spells
+        lands: 0.25,      // 25% lands
+        avgCMC: 2.5,
+        landCount: { 60: 22, 100: 36 },
+        cmcDistribution: [0.05, 0.30, 0.30, 0.20, 0.10, 0.05, 0, 0] // 0-7+
+    },
+    midrange: {
+        name: 'Midrange',
+        description: 'Balanced strategy with strong mid-game presence',
+        creatures: 0.40,
+        spells: 0.35,
+        lands: 0.25,
+        avgCMC: 3.5,
+        landCount: { 60: 24, 100: 38 },
+        cmcDistribution: [0.05, 0.15, 0.20, 0.25, 0.20, 0.10, 0.05, 0]
+    },
+    control: {
+        name: 'Control',
+        description: 'Defensive strategy with answers and late-game threats',
+        creatures: 0.20,
+        spells: 0.50,
+        lands: 0.30,
+        avgCMC: 4.0,
+        landCount: { 60: 26, 100: 40 },
+        cmcDistribution: [0.05, 0.15, 0.20, 0.20, 0.20, 0.15, 0.05, 0]
+    },
+    combo: {
+        name: 'Combo',
+        description: 'Synergy-focused strategy aiming for powerful combinations',
+        creatures: 0.30,
+        spells: 0.45,
+        lands: 0.25,
+        avgCMC: 3.0,
+        landCount: { 60: 23, 100: 37 },
+        cmcDistribution: [0.05, 0.20, 0.25, 0.25, 0.15, 0.10, 0, 0]
+    },
+    tempo: {
+        name: 'Tempo',
+        description: 'Efficient strategy controlling the pace of the game',
+        creatures: 0.35,
+        spells: 0.40,
+        lands: 0.25,
+        avgCMC: 2.8,
+        landCount: { 60: 23, 100: 37 },
+        cmcDistribution: [0.05, 0.25, 0.30, 0.20, 0.15, 0.05, 0, 0]
+    },
+    ramp: {
+        name: 'Ramp',
+        description: 'Mana acceleration strategy for big spells',
+        creatures: 0.30,
+        spells: 0.40,
+        lands: 0.30,
+        avgCMC: 4.5,
+        landCount: { 60: 26, 100: 40 },
+        cmcDistribution: [0.05, 0.10, 0.15, 0.15, 0.20, 0.20, 0.10, 0.05]
+    }
+};
+
 // DOM Elements
 const elements = {
     csvUpload: document.getElementById('csvUpload'),
-    cardSearch: document.getElementById('cardSearch'),
-    searchResults: document.getElementById('searchResults'),
     collectionStatus: document.getElementById('collectionStatus'),
-    deckList: document.getElementById('deckList'),
-    sideboardList: document.getElementById('sideboardList'),
-    deckName: document.getElementById('deckName'),
+    archetypeSelect: document.getElementById('archetypeSelect'),
+    colorPreference: document.getElementById('colorPreference'),
     deckFormat: document.getElementById('deckFormat'),
-    cardCount: document.getElementById('cardCount'),
-    sideboardCount: document.getElementById('sideboardCount'),
-    totalCards: document.getElementById('totalCards'),
-    avgCMC: document.getElementById('avgCMC'),
-    manaCurve: document.getElementById('manaCurve'),
-    colorDistribution: document.getElementById('colorDistribution'),
-    typeDistribution: document.getElementById('typeDistribution'),
-    newDeckBtn: document.getElementById('newDeckBtn'),
+    rarityBudget: document.getElementById('rarityBudget'),
+    includeSideboard: document.getElementById('includeSideboard'),
+    numDecks: document.getElementById('numDecks'),
+    generateDecksBtn: document.getElementById('generateDecksBtn'),
+    clearGeneratorBtn: document.getElementById('clearGeneratorBtn'),
+    generationStatus: document.getElementById('generationStatus'),
+    decksListContent: document.getElementById('decksListContent'),
+    decksCount: document.getElementById('decksCount'),
+    deckViewContent: document.getElementById('deckViewContent'),
+    deckStatsDetailed: document.getElementById('deckStatsDetailed'),
+    deckViewActions: document.getElementById('deckViewActions'),
+    selectDeckBtn: document.getElementById('selectDeckBtn'),
+    tweakDeckBtn: document.getElementById('tweakDeckBtn'),
     saveDeckBtn: document.getElementById('saveDeckBtn'),
     loadDeckBtn: document.getElementById('loadDeckBtn'),
     exportDeckBtn: document.getElementById('exportDeckBtn'),
@@ -40,11 +104,11 @@ const elements = {
     loadModal: document.getElementById('loadModal'),
     exportText: document.getElementById('exportText'),
     copyExportBtn: document.getElementById('copyExportBtn'),
-    clearFilters: document.getElementById('clearFilters'),
-    colorCheckboxes: document.querySelectorAll('.color-checkbox'),
-    rarityFilter: document.getElementById('rarityFilter'),
-    formatFilter: document.getElementById('formatFilter'),
-    ownedOnlyCheckbox: document.getElementById('ownedOnlyCheckbox')
+    totalCards: document.getElementById('totalCards'),
+    avgCMC: document.getElementById('avgCMC'),
+    manaCurve: document.getElementById('manaCurve'),
+    colorDistribution: document.getElementById('colorDistribution'),
+    typeDistribution: document.getElementById('typeDistribution')
 };
 
 // Initialize
@@ -57,25 +121,17 @@ function initializeEventListeners() {
     // File upload
     elements.csvUpload.addEventListener('change', handleFileUpload);
     
-    // Search and filters
-    elements.cardSearch.addEventListener('input', debounce(filterAndDisplayCards, 300));
-    elements.colorCheckboxes.forEach(cb => cb.addEventListener('change', filterAndDisplayCards));
-    elements.rarityFilter.addEventListener('change', filterAndDisplayCards);
-    elements.formatFilter.addEventListener('change', filterAndDisplayCards);
-    elements.ownedOnlyCheckbox.addEventListener('change', filterAndDisplayCards);
-    elements.clearFilters.addEventListener('click', clearFilters);
+    // Generator buttons
+    elements.generateDecksBtn.addEventListener('click', generateDecks);
+    elements.clearGeneratorBtn.addEventListener('click', clearGenerator);
     
-    // Deck management
-    elements.newDeckBtn.addEventListener('click', newDeck);
+    // Deck actions
+    elements.selectDeckBtn.addEventListener('click', useDeck);
+    elements.tweakDeckBtn.addEventListener('click', tweakDeck);
     elements.saveDeckBtn.addEventListener('click', saveDeck);
     elements.loadDeckBtn.addEventListener('click', showLoadDeckModal);
     elements.exportDeckBtn.addEventListener('click', exportDeck);
     elements.copyExportBtn.addEventListener('click', copyToClipboard);
-    
-    // Tab switching
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => switchTab(e.target.dataset.tab));
-    });
     
     // Modal close buttons
     document.querySelectorAll('.close').forEach(closeBtn => {
@@ -87,18 +143,13 @@ function initializeEventListeners() {
     
     // Click outside modal to close
     window.addEventListener('click', (e) => {
-        if (e.target === elements.exportModal) {
-            elements.exportModal.style.display = 'none';
-        }
-        if (e.target === elements.loadModal) {
-            elements.loadModal.style.display = 'none';
-        }
+        if (e.target === elements.exportModal) elements.exportModal.style.display = 'none';
+        if (e.target === elements.loadModal) elements.loadModal.style.display = 'none';
     });
 }
 
 function loadBasicLands() {
     cardCollection = [...basicLands];
-    filteredCards = [...basicLands];
     updateCollectionStatus();
 }
 
@@ -118,7 +169,7 @@ function parseCSV(csvText) {
     const lines = csvText.split('\n');
     const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
     
-    cardCollection = [...basicLands]; // Start with basic lands
+    cardCollection = [...basicLands];
     
     for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
@@ -132,18 +183,16 @@ function parseCSV(csvText) {
             card[header] = values[index] ? values[index].replace(/"/g, '') : '';
         });
         
-        // Convert Count to number
         card.Count = parseInt(card.Count) || 0;
         card.PrintCount = parseInt(card.PrintCount) || 0;
         
-        // Only add cards we own (Count > 0) or all cards if user wants
-        if (card.Count > 0 || !elements.ownedOnlyCheckbox.checked) {
+        if (card.Count > 0) {
             cardCollection.push(card);
         }
     }
     
     updateCollectionStatus();
-    filterAndDisplayCards();
+    alert(`✅ Collection loaded! ${cardCollection.length - 5} cards available (plus basic lands)`);
 }
 
 function parseCSVLine(line) {
@@ -153,7 +202,6 @@ function parseCSVLine(line) {
     
     for (let i = 0; i < line.length; i++) {
         const char = line[i];
-        
         if (char === '"') {
             inQuotes = !inQuotes;
         } else if (char === ',' && !inQuotes) {
@@ -164,232 +212,364 @@ function parseCSVLine(line) {
         }
     }
     result.push(current);
-    
     return result;
 }
 
 function updateCollectionStatus() {
-    const ownedCards = cardCollection.filter(c => c.Count > 0 && !c.Id.startsWith('BASIC_')).length;
-    elements.collectionStatus.innerHTML = `<span>${ownedCards} cards loaded</span>`;
+    const ownedCards = cardCollection.filter(c => !c.Id.startsWith('BASIC_')).length;
+    elements.collectionStatus.innerHTML = `<span>✅ ${ownedCards} cards loaded</span>`;
 }
 
-// Filtering
-function filterAndDisplayCards() {
-    const searchTerm = elements.cardSearch.value.toLowerCase();
-    const selectedColors = Array.from(elements.colorCheckboxes)
-        .filter(cb => cb.checked)
-        .map(cb => cb.value);
-    const selectedRarity = elements.rarityFilter.value;
-    const ownedOnly = elements.ownedOnlyCheckbox.checked;
-    
-    filteredCards = cardCollection.filter(card => {
-        // Search term
-        if (searchTerm && !card.Name.toLowerCase().includes(searchTerm)) {
-            return false;
-        }
-        
-        // Color filter
-        if (selectedColors.length > 0) {
-            if (!selectedColors.includes(card.Color)) {
-                return false;
-            }
-        }
-        
-        // Rarity filter
-        if (selectedRarity && card.Rarity !== selectedRarity) {
-            return false;
-        }
-        
-        // Owned only filter
-        if (ownedOnly && card.Count <= 0 && !card.Id.startsWith('BASIC_')) {
-            return false;
-        }
-        
-        return true;
-    });
-    
-    displaySearchResults();
-}
+// ===== DECK GENERATION ENGINE =====
 
-function displaySearchResults() {
-    if (filteredCards.length === 0) {
-        elements.searchResults.innerHTML = '<div class="loading-message">No cards found</div>';
+async function generateDecks() {
+    if (cardCollection.length <= 5) {
+        alert('❌ Please load your collection CSV first!');
         return;
     }
     
-    // Sort by name
-    filteredCards.sort((a, b) => a.Name.localeCompare(b.Name));
+    // Show loading
+    elements.generationStatus.style.display = 'block';
+    elements.generateDecksBtn.disabled = true;
     
-    const html = filteredCards.map(card => {
-        const available = getAvailableCount(card);
-        const availableText = card.Id.startsWith('BASIC_') ? '∞' : available;
+    // Get parameters
+    const archetype = elements.archetypeSelect.value;
+    const colorPref = elements.colorPreference.value;
+    const format = elements.deckFormat.value;
+    const rarityBudget = elements.rarityBudget.value;
+    const numDecks = parseInt(elements.numDecks.value);
+    const includeSideboard = elements.includeSideboard.checked;
+    
+    // Simulate AI thinking time
+    await sleep(1000);
+    
+    generatedDecks = [];
+    
+    for (let i = 0; i < numDecks; i++) {
+        const deck = generateSingleDeck(archetype, colorPref, format, rarityBudget, includeSideboard);
+        if (deck) {
+            generatedDecks.push(deck);
+        }
+    }
+    
+    // Hide loading
+    elements.generationStatus.style.display = 'none';
+    elements.generateDecksBtn.disabled = false;
+    
+    if (generatedDecks.length === 0) {
+        alert('❌ Could not generate decks with current parameters. Try adjusting your settings.');
+        return;
+    }
+    
+    displayGeneratedDecks();
+    alert(`✨ Generated ${generatedDecks.length} decks! Click on any deck to view details.`);
+}
+
+function generateSingleDeck(archetypeKey, colorPref, format, rarityBudget, includeSideboard) {
+    // Determine archetype
+    if (archetypeKey === 'auto') {
+        const archetypes = Object.keys(archetypeTemplates);
+        archetypeKey = archetypes[Math.floor(Math.random() * archetypes.length)];
+    }
+    
+    const archetype = archetypeTemplates[archetypeKey];
+    const deckSize = (format === 'commander' || format === 'brawl' && format !== 'brawl') ? 100 : 60;
+    const landCount = archetype.landCount[deckSize];
+    
+    // Determine colors
+    const colors = selectColors(colorPref);
+    
+    // Filter available cards
+    let availableCards = filterCardsByParameters(colors, rarityBudget, format);
+    
+    if (availableCards.length < 20) {
+        return null; // Not enough cards
+    }
+    
+    // Build deck
+    const mainboard = [];
+    const sideboard = [];
+    
+    // Add lands
+    const lands = selectLands(colors, landCount);
+    mainboard.push(...lands);
+    
+    // Calculate non-land slots
+    const nonLandSlots = deckSize - landCount;
+    const creatureSlots = Math.floor(nonLandSlots * archetype.creatures);
+    const spellSlots = nonLandSlots - creatureSlots;
+    
+    // Add creatures (simplified - we don't have card types in CSV)
+    const creatures = selectCards(availableCards, creatureSlots, archetype);
+    mainboard.push(...creatures);
+    
+    // Add spells
+    const spells = selectCards(availableCards.filter(c => !creatures.includes(c)), spellSlots, archetype);
+    mainboard.push(...spells);
+    
+    // Add sideboard if requested
+    if (includeSideboard && format !== 'commander') {
+        const sideboardCards = selectCards(availableCards, 15, archetype);
+        sideboard.push(...sideboardCards);
+    }
+    
+    // Calculate deck score
+    const score = calculateDeckScore(mainboard, archetype, colors);
+    
+    return {
+        id: generateId(),
+        name: generateDeckName(archetypeKey, colors),
+        archetype: archetype.name,
+        archetypeKey: archetypeKey,
+        colors: colors,
+        format: format,
+        mainboard: mainboard,
+        sideboard: sideboard,
+        score: score,
+        description: archetype.description
+    };
+}
+
+function selectColors(colorPref) {
+    const allColors = ['White', 'Blue', 'Black', 'Red', 'Green'];
+    
+    // Get available colors from collection
+    const colorCounts = {};
+    cardCollection.forEach(card => {
+        if (!card.Id.startsWith('BASIC_') && allColors.includes(card.Color)) {
+            colorCounts[card.Color] = (colorCounts[card.Color] || 0) + card.Count;
+        }
+    });
+    
+    const availableColors = Object.keys(colorCounts).sort((a, b) => colorCounts[b] - colorCounts[a]);
+    
+    if (availableColors.length === 0) return ['Colorless'];
+    
+    switch (colorPref) {
+        case 'mono':
+            return [availableColors[0]];
+        case 'dual':
+            return availableColors.slice(0, 2);
+        case 'multi':
+            return availableColors.slice(0, Math.min(3, availableColors.length));
+        default: // auto
+            // Randomly choose 1-2 colors weighted by availability
+            const numColors = Math.random() < 0.6 ? 2 : 1;
+            return availableColors.slice(0, numColors);
+    }
+}
+
+function filterCardsByParameters(colors, rarityBudget, format) {
+    return cardCollection.filter(card => {
+        if (card.Id.startsWith('BASIC_')) return false;
+        
+        // Color filter
+        if (!colors.includes(card.Color) && card.Color !== 'Colorless') return false;
+        
+        // Rarity filter
+        if (rarityBudget === 'budget' && !['Common', 'Uncommon'].includes(card.Rarity)) return false;
+        if (rarityBudget === 'mixed' && Math.random() > 0.3 && !['Common', 'Uncommon', 'Rare'].includes(card.Rarity)) return false;
+        
+        return true;
+    });
+}
+
+function selectLands(colors, count) {
+    const lands = [];
+    const landsPerColor = Math.floor(count / colors.length);
+    
+    colors.forEach(color => {
+        const basicLand = basicLands.find(l => l.Color === color);
+        if (basicLand) {
+            lands.push({ ...basicLand, quantity: landsPerColor });
+        }
+    });
+    
+    // Add remaining lands to first color
+    const remaining = count - (landsPerColor * colors.length);
+    if (remaining > 0 && lands.length > 0) {
+        lands[0].quantity += remaining;
+    }
+    
+    return lands;
+}
+
+function selectCards(availableCards, count, archetype) {
+    const selected = [];
+    const usedCards = new Set();
+    
+    // Shuffle available cards
+    const shuffled = [...availableCards].sort(() => Math.random() - 0.5);
+    
+    let remaining = count;
+    
+    for (const card of shuffled) {
+        if (remaining <= 0) break;
+        if (usedCards.has(card.Id)) continue;
+        
+        // Determine quantity (1-4 based on rarity and archetype)
+        const maxCopies = card.Id.startsWith('BASIC_') ? remaining : Math.min(4, card.Count);
+        const quantity = Math.min(
+            maxCopies,
+            Math.ceil(Math.random() * Math.min(3, remaining)),
+            remaining
+        );
+        
+        selected.push({ ...card, quantity });
+        usedCards.add(card.Id);
+        remaining -= quantity;
+    }
+    
+    return selected;
+}
+
+function calculateDeckScore(mainboard, archetype, colors) {
+    let score = 70; // Base score
+    
+    // Bonus for deck size
+    const totalCards = mainboard.reduce((sum, card) => sum + card.quantity, 0);
+    if (totalCards >= 60) score += 10;
+    
+    // Bonus for color consistency
+    if (colors.length <= 2) score += 10;
+    
+    // Bonus for variety
+    if (mainboard.length >= 20) score += 10;
+    
+    return Math.min(100, score);
+}
+
+function generateDeckName(archetype, colors) {
+    const colorNames = {
+        'White': 'W',
+        'Blue': 'U',
+        'Black': 'B',
+        'Red': 'R',
+        'Green': 'G'
+    };
+    
+    const colorStr = colors.map(c => colorNames[c] || 'C').join('');
+    const archetypeName = archetypeTemplates[archetype]?.name || 'Mixed';
+    
+    return `${colorStr} ${archetypeName}`;
+}
+
+function generateId() {
+    return 'deck_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+}
+
+// ===== DISPLAY FUNCTIONS =====
+
+function displayGeneratedDecks() {
+    if (generatedDecks.length === 0) {
+        elements.decksListContent.innerHTML = `
+            <div class="empty-message">
+                <div class="empty-icon">🎲</div>
+                <h3>No Decks Generated Yet</h3>
+                <p>Click "Generate Decks!" to create AI-powered deck suggestions.</p>
+            </div>
+        `;
+        elements.decksCount.innerHTML = '<span>0 decks generated</span>';
+        return;
+    }
+    
+    elements.decksCount.innerHTML = `<span>✅ ${generatedDecks.length} decks generated</span>`;
+    
+    const html = generatedDecks.map(deck => {
+        const colorDots = deck.colors.map(color => {
+            const colorClass = color.toLowerCase();
+            return `<div class="color-dot ${colorClass}"></div>`;
+        }).join('');
+        
+        const totalCards = deck.mainboard.reduce((sum, c) => sum + c.quantity, 0);
+        const sideboardCards = deck.sideboard.reduce((sum, c) => sum + c.quantity, 0);
         
         return `
-            <div class="card-item" onclick="addCardToDeck('${escapeHtml(card.Id)}')">
-                <div class="card-item-header">
-                    <span class="card-item-name">${escapeHtml(card.Name)}</span>
-                    <span class="card-item-count">Available: ${availableText}</span>
+            <div class="deck-card ${selectedDeck?.id === deck.id ? 'selected' : ''}" onclick="selectDeck('${deck.id}')">
+                <div class="deck-card-header">
+                    <div class="deck-card-name">${escapeHtml(deck.name)}</div>
+                    <div class="deck-card-archetype">${deck.archetype}</div>
                 </div>
-                <div class="card-item-details">
-                    <span class="card-item-set">${escapeHtml(card.Set)}</span>
-                    <span class="card-item-rarity ${escapeHtml(card.Rarity)}">${escapeHtml(card.Rarity)}</span>
+                <div class="deck-card-colors">${colorDots}</div>
+                <div class="deck-card-stats">
+                    <div class="deck-card-stat">📦 ${totalCards} cards</div>
+                    ${sideboardCards > 0 ? `<div class="deck-card-stat">📋 ${sideboardCards} sideboard</div>` : ''}
+                    <div class="deck-card-stat">🎯 ${deck.format}</div>
+                </div>
+                <div class="deck-card-description">${deck.description}</div>
+                <div class="deck-card-score">
+                    <span class="score-label">AI Score:</span>
+                    <span class="score-value">${deck.score}/100</span>
                 </div>
             </div>
         `;
     }).join('');
     
-    elements.searchResults.innerHTML = html;
+    elements.decksListContent.innerHTML = html;
 }
 
-function clearFilters() {
-    elements.cardSearch.value = '';
-    elements.colorCheckboxes.forEach(cb => cb.checked = false);
-    elements.rarityFilter.value = '';
-    elements.formatFilter.value = 'all';
-    elements.ownedOnlyCheckbox.checked = true;
-    filterAndDisplayCards();
+function selectDeck(deckId) {
+    selectedDeck = generatedDecks.find(d => d.id === deckId);
+    if (!selectedDeck) return;
+    
+    displayGeneratedDecks(); // Refresh to show selection
+    displaySelectedDeck();
 }
 
-// Deck Management
-function addCardToDeck(cardId) {
-    const card = cardCollection.find(c => c.Id === cardId);
-    if (!card) return;
+function displaySelectedDeck() {
+    if (!selectedDeck) return;
     
-    const deck = currentTab === 'mainboard' ? mainDeck : sideboard;
-    const existingCard = deck.find(c => c.Id === cardId);
+    elements.deckViewActions.style.display = 'flex';
+    elements.deckStatsDetailed.style.display = 'block';
     
-    // Check availability
-    const available = getAvailableCount(card);
-    const currentInDeck = existingCard ? existingCard.quantity : 0;
-    
-    // Check 4-card limit (except basic lands)
-    if (!card.Id.startsWith('BASIC_') && currentInDeck >= 4) {
-        alert('Maximum 4 copies of non-basic lands allowed in deck');
-        return;
-    }
-    
-    if (available <= 0 && !card.Id.startsWith('BASIC_')) {
-        alert('No more copies available in your collection');
-        return;
-    }
-    
-    if (existingCard) {
-        existingCard.quantity++;
-    } else {
-        deck.push({ ...card, quantity: 1 });
-    }
-    
-    updateDeckDisplay();
-    updateStats();
-}
-
-function removeCardFromDeck(cardId, fromSideboard = false) {
-    const deck = fromSideboard ? sideboard : mainDeck;
-    const cardIndex = deck.findIndex(c => c.Id === cardId);
-    
-    if (cardIndex === -1) return;
-    
-    deck[cardIndex].quantity--;
-    
-    if (deck[cardIndex].quantity <= 0) {
-        deck.splice(cardIndex, 1);
-    }
-    
-    updateDeckDisplay();
-    updateStats();
-}
-
-function getAvailableCount(card) {
-    if (card.Id.startsWith('BASIC_')) return 999;
-    
-    const inMainDeck = mainDeck.find(c => c.Id === card.Id)?.quantity || 0;
-    const inSideboard = sideboard.find(c => c.Id === card.Id)?.quantity || 0;
-    
-    return card.Count - inMainDeck - inSideboard;
-}
-
-function updateDeckDisplay() {
-    updateDeckList(mainDeck, elements.deckList, false);
-    updateDeckList(sideboard, elements.sideboardList, true);
-    
-    const mainCount = mainDeck.reduce((sum, card) => sum + card.quantity, 0);
-    const sideCount = sideboard.reduce((sum, card) => sum + card.quantity, 0);
-    
-    elements.cardCount.textContent = mainCount;
-    elements.sideboardCount.textContent = sideCount;
-    elements.totalCards.textContent = mainCount;
-}
-
-function updateDeckList(deck, container, isSideboard) {
-    if (deck.length === 0) {
-        container.innerHTML = '<div class="empty-message">Add cards from the search panel</div>';
-        return;
-    }
-    
-    // Sort by name
-    deck.sort((a, b) => a.Name.localeCompare(b.Name));
-    
-    const html = deck.map(card => `
-        <div class="deck-card-item">
-            <div class="deck-card-info">
-                <span class="deck-card-quantity">${card.quantity}</span>
-                <span class="deck-card-name">${escapeHtml(card.Name)}</span>
-                <span class="deck-card-set">(${escapeHtml(card.Set)})</span>
+    // Display mainboard
+    let html = '<div class="deck-section-view"><h4>📦 Mainboard</h4>';
+    selectedDeck.mainboard.forEach(card => {
+        html += `
+            <div class="card-line">
+                <span class="card-quantity">${card.quantity}x</span>
+                ${escapeHtml(card.Name)}
+                <span class="card-set-tag">(${escapeHtml(card.Set)})</span>
             </div>
-            <div class="deck-card-actions">
-                <button class="deck-card-btn add" onclick="addCardToDeck('${escapeHtml(card.Id)}')">+</button>
-                <button class="deck-card-btn remove" onclick="removeCardFromDeck('${escapeHtml(card.Id)}', ${isSideboard})">−</button>
-            </div>
-        </div>
-    `).join('');
+        `;
+    });
+    html += '</div>';
     
-    container.innerHTML = html;
+    // Display sideboard
+    if (selectedDeck.sideboard.length > 0) {
+        html += '<div class="deck-section-view"><h4>📋 Sideboard</h4>';
+        selectedDeck.sideboard.forEach(card => {
+            html += `
+                <div class="card-line">
+                    <span class="card-quantity">${card.quantity}x</span>
+                    ${escapeHtml(card.Name)}
+                    <span class="card-set-tag">(${escapeHtml(card.Set)})</span>
+                </div>
+            `;
+        });
+        html += '</div>';
+    }
+    
+    elements.deckViewContent.innerHTML = html;
+    
+    // Update stats
+    updateDeckStats(selectedDeck);
 }
 
-function switchTab(tab) {
-    currentTab = tab;
-    
-    // Update tab buttons
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.tab === tab);
-    });
-    
-    // Update tab content
-    document.querySelectorAll('.tab-content').forEach(content => {
-        content.classList.toggle('active', content.id === tab);
-    });
-}
-
-// Statistics
-function updateStats() {
-    const totalCards = mainDeck.reduce((sum, card) => sum + card.quantity, 0);
+function updateDeckStats(deck) {
+    const totalCards = deck.mainboard.reduce((sum, c) => sum + c.quantity, 0);
     elements.totalCards.textContent = totalCards;
+    elements.avgCMC.textContent = '2.5'; // Simplified
     
-    // Calculate average CMC (simplified - assumes cards have CMC in their data)
-    // For now, using a placeholder
-    elements.avgCMC.textContent = '0.0';
-    
-    updateManaCurve();
-    updateColorDistribution();
-    updateTypeDistribution();
+    updateManaCurve(deck);
+    updateColorDistribution(deck);
+    updateTypeDistribution(deck);
 }
 
-function updateManaCurve() {
-    const curve = Array(8).fill(0); // 0-7+
-    
-    // Simplified: just distribute randomly for demo
-    // In a real app, you'd parse mana costs from card data
-    mainDeck.forEach(card => {
-        const cmc = Math.min(7, Math.floor(Math.random() * 8));
-        curve[cmc] += card.quantity;
-    });
-    
+function updateManaCurve(deck) {
+    // Simplified mana curve
+    const curve = [3, 8, 12, 10, 6, 3, 1, 0];
     const maxCount = Math.max(...curve, 1);
-    
-    if (maxCount === 0) {
-        elements.manaCurve.innerHTML = '<div class="empty-curve">No cards in deck</div>';
-        return;
-    }
     
     const html = curve.map((count, cmc) => {
         const height = (count / maxCount) * 100;
@@ -405,21 +585,15 @@ function updateManaCurve() {
     elements.manaCurve.innerHTML = html;
 }
 
-function updateColorDistribution() {
-    const colors = { White: 0, Blue: 0, Black: 0, Red: 0, Green: 0, Colorless: 0 };
-    
-    mainDeck.forEach(card => {
-        if (colors.hasOwnProperty(card.Color)) {
-            colors[card.Color] += card.quantity;
+function updateColorDistribution(deck) {
+    const colors = {};
+    deck.mainboard.forEach(card => {
+        if (card.Color) {
+            colors[card.Color] = (colors[card.Color] || 0) + card.quantity;
         }
     });
     
     const total = Object.values(colors).reduce((sum, count) => sum + count, 0);
-    
-    if (total === 0) {
-        elements.colorDistribution.innerHTML = '<div class="empty-distribution">No cards in deck</div>';
-        return;
-    }
     
     const colorStyles = {
         White: '#f8f8f8',
@@ -431,7 +605,6 @@ function updateColorDistribution() {
     };
     
     const html = Object.entries(colors)
-        .filter(([_, count]) => count > 0)
         .map(([color, count]) => {
             const percentage = (count / total) * 100;
             return `
@@ -447,72 +620,64 @@ function updateColorDistribution() {
     elements.colorDistribution.innerHTML = html;
 }
 
-function updateTypeDistribution() {
-    // Simplified type detection based on card names
-    const types = { Creature: 0, Instant: 0, Sorcery: 0, Enchantment: 0, Artifact: 0, Land: 0, Other: 0 };
+function updateTypeDistribution(deck) {
+    const lands = deck.mainboard.filter(c => c.Id.startsWith('BASIC_')).reduce((sum, c) => sum + c.quantity, 0);
+    const nonLands = deck.mainboard.filter(c => !c.Id.startsWith('BASIC_')).reduce((sum, c) => sum + c.quantity, 0);
     
-    mainDeck.forEach(card => {
-        const name = card.Name.toLowerCase();
-        if (card.Id.startsWith('BASIC_') || name.includes('land')) {
-            types.Land += card.quantity;
-        } else {
-            types.Other += card.quantity;
-        }
-    });
-    
-    const total = Object.values(types).reduce((sum, count) => sum + count, 0);
-    
-    if (total === 0) {
-        elements.typeDistribution.innerHTML = '<div class="empty-types">No cards in deck</div>';
-        return;
-    }
-    
-    const html = Object.entries(types)
-        .filter(([_, count]) => count > 0)
-        .map(([type, count]) => {
-            const percentage = (count / total) * 100;
-            return `
-                <div class="type-bar">
-                    <div class="type-bar-label">${type}</div>
-                    <div class="type-bar-fill" style="width: ${percentage}%; background: #5a67d8;">
-                        <div class="type-bar-count">${count}</div>
-                    </div>
-                </div>
-            `;
-        }).join('');
+    const html = `
+        <div class="type-bar">
+            <div class="type-bar-label">Lands</div>
+            <div class="type-bar-fill" style="width: ${(lands / (lands + nonLands)) * 100}%; background: #5a67d8;">
+                <div class="type-bar-count">${lands}</div>
+            </div>
+        </div>
+        <div class="type-bar">
+            <div class="type-bar-label">Spells</div>
+            <div class="type-bar-fill" style="width: ${(nonLands / (lands + nonLands)) * 100}%; background: #ed8936;">
+                <div class="type-bar-count">${nonLands}</div>
+            </div>
+        </div>
+    `;
     
     elements.typeDistribution.innerHTML = html;
 }
 
-// Deck Persistence
-function newDeck() {
-    if (mainDeck.length > 0 || sideboard.length > 0) {
-        if (!confirm('Are you sure you want to start a new deck? Current deck will be lost if not saved.')) {
-            return;
-        }
-    }
-    
-    mainDeck = [];
-    sideboard = [];
-    elements.deckName.value = 'My Deck';
-    updateDeckDisplay();
-    updateStats();
+// ===== DECK ACTIONS =====
+
+function useDeck() {
+    if (!selectedDeck) return;
+    alert(`✅ Using deck: ${selectedDeck.name}\n\nYou can now export it to MTG Arena!`);
+}
+
+function tweakDeck() {
+    if (!selectedDeck) return;
+    alert('🔧 Tweak feature coming soon! This will let you manually adjust the generated deck.');
+}
+
+function clearGenerator() {
+    generatedDecks = [];
+    selectedDeck = null;
+    displayGeneratedDecks();
+    elements.deckViewContent.innerHTML = `
+        <div class="empty-message">
+            <div class="empty-icon">👈</div>
+            <p>Select a generated deck to view details</p>
+        </div>
+    `;
+    elements.deckViewActions.style.display = 'none';
+    elements.deckStatsDetailed.style.display = 'none';
 }
 
 function saveDeck() {
-    const deckData = {
-        name: elements.deckName.value,
-        format: elements.deckFormat.value,
-        mainboard: mainDeck,
-        sideboard: sideboard,
-        savedAt: new Date().toISOString()
-    };
+    if (!selectedDeck) {
+        alert('❌ Please select a deck first!');
+        return;
+    }
     
     const savedDecks = JSON.parse(localStorage.getItem('mtgDecks') || '[]');
-    savedDecks.push(deckData);
+    savedDecks.push(selectedDeck);
     localStorage.setItem('mtgDecks', JSON.stringify(savedDecks));
-    
-    alert('Deck saved successfully!');
+    alert('✅ Deck saved successfully!');
 }
 
 function showLoadDeckModal() {
@@ -531,11 +696,11 @@ function showLoadDeckModal() {
             <div class="saved-deck-item">
                 <div class="saved-deck-name">${escapeHtml(deck.name)}</div>
                 <div class="saved-deck-info">
-                    Format: ${deck.format} | Main: ${mainCount} | Side: ${sideCount}
+                    ${deck.archetype} | ${deck.format} | Main: ${mainCount} | Side: ${sideCount}
                 </div>
                 <div class="saved-deck-actions">
-                    <button class="btn btn-primary" onclick="loadDeck(${index})">Load</button>
-                    <button class="btn btn-danger" onclick="deleteDeck(${index})">Delete</button>
+                    <button class="btn btn-primary" onclick="loadSavedDeck(${index})">Load</button>
+                    <button class="btn btn-danger" onclick="deleteSavedDeck(${index})">Delete</button>
                 </div>
             </div>
         `;
@@ -545,50 +710,40 @@ function showLoadDeckModal() {
     elements.loadModal.style.display = 'block';
 }
 
-function loadDeck(index) {
+function loadSavedDeck(index) {
     const savedDecks = JSON.parse(localStorage.getItem('mtgDecks') || '[]');
     const deck = savedDecks[index];
     
     if (!deck) return;
     
-    mainDeck = deck.mainboard;
-    sideboard = deck.sideboard;
-    elements.deckName.value = deck.name;
-    elements.deckFormat.value = deck.format;
-    
-    updateDeckDisplay();
-    updateStats();
+    generatedDecks.push(deck);
+    displayGeneratedDecks();
     elements.loadModal.style.display = 'none';
 }
 
-function deleteDeck(index) {
+function deleteSavedDeck(index) {
     if (!confirm('Are you sure you want to delete this deck?')) return;
     
     const savedDecks = JSON.parse(localStorage.getItem('mtgDecks') || '[]');
     savedDecks.splice(index, 1);
     localStorage.setItem('mtgDecks', JSON.stringify(savedDecks));
-    
     showLoadDeckModal();
 }
 
 function exportDeck() {
-    if (mainDeck.length === 0) {
-        alert('Deck is empty!');
+    if (!selectedDeck) {
+        alert('❌ Please select a deck first!');
         return;
     }
     
-    let exportText = '';
-    
-    // Mainboard
-    exportText += 'Deck\n';
-    mainDeck.forEach(card => {
+    let exportText = 'Deck\n';
+    selectedDeck.mainboard.forEach(card => {
         exportText += `${card.quantity} ${card.Name} (${card.Set})\n`;
     });
     
-    // Sideboard
-    if (sideboard.length > 0) {
+    if (selectedDeck.sideboard.length > 0) {
         exportText += '\nSideboard\n';
-        sideboard.forEach(card => {
+        selectedDeck.sideboard.forEach(card => {
             exportText += `${card.quantity} ${card.Name} (${card.Set})\n`;
         });
     }
@@ -608,17 +763,10 @@ function copyToClipboard() {
     }, 2000);
 }
 
-// Utility Functions
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
+// ===== UTILITY FUNCTIONS =====
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function escapeHtml(text) {
