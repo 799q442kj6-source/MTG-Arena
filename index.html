@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MTG Arena Deck Builder</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎴 MTG Arena Deck Builder</h1>
+            <div class="header-actions">
+                <label for="csvUpload" class="btn btn-primary">Load Collection CSV</label>
+                <input type="file" id="csvUpload" accept=".csv" style="display: none;">
+                <button id="newDeckBtn" class="btn btn-secondary">New Deck</button>
+                <button id="saveDeckBtn" class="btn btn-success">Save Deck</button>
+                <button id="loadDeckBtn" class="btn btn-info">Load Deck</button>
+                <button id="exportDeckBtn" class="btn btn-warning">Export to Arena</button>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- Left Panel: Card Search -->
+            <aside class="search-panel">
+                <div class="search-header">
+                    <h2>Card Search</h2>
+                    <div class="collection-status" id="collectionStatus">
+                        <span>No collection loaded</span>
+                    </div>
+                </div>
+                
+                <div class="search-controls">
+                    <input type="text" id="cardSearch" placeholder="Search cards..." class="search-input">
+                    
+                    <div class="filter-section">
+                        <h3>Colors</h3>
+                        <div class="color-filters">
+                            <label class="color-filter white">
+                                <input type="checkbox" value="White" class="color-checkbox">
+                                <span>W</span>
+                            </label>
+                            <label class="color-filter blue">
+                                <input type="checkbox" value="Blue" class="color-checkbox">
+                                <span>U</span>
+                            </label>
+                            <label class="color-filter black">
+                                <input type="checkbox" value="Black" class="color-checkbox">
+                                <span>B</span>
+                            </label>
+                            <label class="color-filter red">
+                                <input type="checkbox" value="Red" class="color-checkbox">
+                                <span>R</span>
+                            </label>
+                            <label class="color-filter green">
+                                <input type="checkbox" value="Green" class="color-checkbox">
+                                <span>G</span>
+                            </label>
+                            <label class="color-filter colorless">
+                                <input type="checkbox" value="Colorless" class="color-checkbox">
+                                <span>C</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="filter-section">
+                        <h3>Rarity</h3>
+                        <select id="rarityFilter" class="filter-select">
+                            <option value="">All Rarities</option>
+                            <option value="Common">Common</option>
+                            <option value="Uncommon">Uncommon</option>
+                            <option value="Rare">Rare</option>
+                            <option value="Mythic">Mythic</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-section">
+                        <h3>Format</h3>
+                        <select id="formatFilter" class="filter-select">
+                            <option value="all">All Cards</option>
+                            <option value="standard">Standard</option>
+                            <option value="historic">Historic</option>
+                            <option value="explorer">Explorer</option>
+                            <option value="alchemy">Alchemy</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-section">
+                        <label>
+                            <input type="checkbox" id="ownedOnlyCheckbox" checked>
+                            <span>Show Only Owned Cards</span>
+                        </label>
+                    </div>
+
+                    <button id="clearFilters" class="btn btn-secondary">Clear Filters</button>
+                </div>
+
+                <div class="search-results" id="searchResults">
+                    <div class="loading-message">Load your collection CSV to get started!</div>
+                </div>
+            </aside>
+
+            <!-- Center Panel: Deck List -->
+            <main class="deck-panel">
+                <div class="deck-header">
+                    <input type="text" id="deckName" placeholder="Deck Name" class="deck-name-input" value="My Deck">
+                    <div class="deck-format">
+                        <label for="deckFormat">Format:</label>
+                        <select id="deckFormat" class="format-select">
+                            <option value="standard">Standard</option>
+                            <option value="historic">Historic</option>
+                            <option value="explorer">Explorer</option>
+                            <option value="alchemy">Alchemy</option>
+                            <option value="commander">Commander</option>
+                            <option value="brawl">Brawl</option>
+                        </select>
+                    </div>
+                    <div class="deck-stats">
+                        <span class="stat">Mainboard: <strong id="cardCount">0</strong></span>
+                        <span class="stat">Sideboard: <strong id="sideboardCount">0</strong></span>
+                    </div>
+                </div>
+
+                <div class="deck-content">
+                    <div class="deck-tabs">
+                        <button class="tab-btn active" data-tab="mainboard">Mainboard</button>
+                        <button class="tab-btn" data-tab="sideboard">Sideboard</button>
+                    </div>
+
+                    <div id="mainboard" class="tab-content active">
+                        <div class="deck-list" id="deckList">
+                            <div class="empty-message">Add cards from the search panel</div>
+                        </div>
+                    </div>
+
+                    <div id="sideboard" class="tab-content">
+                        <div class="deck-list" id="sideboardList">
+                            <div class="empty-message">Add cards to sideboard</div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Right Panel: Stats & Mana Curve -->
+            <aside class="stats-panel">
+                <div class="stats-header">
+                    <h2>Deck Statistics</h2>
+                </div>
+
+                <div class="stats-summary">
+                    <div class="stat-item">
+                        <span class="stat-label">Total Cards:</span>
+                        <span class="stat-value" id="totalCards">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Avg. CMC:</span>
+                        <span class="stat-value" id="avgCMC">0.0</span>
+                    </div>
+                </div>
+
+                <div class="mana-curve-section">
+                    <h3>Mana Curve</h3>
+                    <div class="mana-curve" id="manaCurve">
+                        <div class="empty-curve">No cards in deck</div>
+                    </div>
+                </div>
+
+                <div class="color-distribution-section">
+                    <h3>Color Distribution</h3>
+                    <div class="color-distribution" id="colorDistribution">
+                        <div class="empty-distribution">No cards in deck</div>
+                    </div>
+                </div>
+
+                <div class="type-distribution-section">
+                    <h3>Card Types</h3>
+                    <div class="type-distribution" id="typeDistribution">
+                        <div class="empty-types">No cards in deck</div>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <!-- Modal for Export -->
+    <div id="exportModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Export to MTG Arena</h2>
+            <p>Copy this decklist and paste it into MTG Arena (Decks → Import):</p>
+            <textarea id="exportText" readonly rows="20"></textarea>
+            <button id="copyExportBtn" class="btn btn-primary">Copy to Clipboard</button>
+            <div id="copySuccess" class="copy-success" style="display: none;">✓ Copied to clipboard!</div>
+        </div>
+    </div>
+
+    <!-- Modal for Load Deck -->
+    <div id="loadModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Load Saved Deck</h2>
+            <div id="savedDecksList"></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
