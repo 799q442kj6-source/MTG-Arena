@@ -237,6 +237,136 @@ function loadBasicLands() {
     updateCollectionStatus();
 }
 
+// ===== SCRYFALL API INTEGRATION =====
+
+const SCRYFALL_CACHE_KEY = 'scryfallCardCache';
+const SCRYFALL_API_BASE = 'https://api.scryfall.com';
+const SCRYFALL_DELAY = 100; // ms between requests (rate limit: 10 req/sec)
+
+let scryfallCache = {};
+
+function loadScryfallCache() {
+    try {
+        const cached = localStorage.getItem(SCRYFALL_CACHE_KEY);
+        if (cached) {
+            scryfallCache = JSON.parse(cached);
+        }
+    } catch (e) {
+        console.error('Error loading Scryfall cache:', e);
+    }
+}
+
+function saveScryfallCache() {
+    try {
+        localStorage.setItem(SCRYFALL_CACHE_KEY, JSON.stringify(scryfallCache));
+    } catch (e) {
+        console.error('Error saving Scryfall cache:', e);
+    }
+}
+
+async function enrichCardWithScryfall(card) {
+    const cacheKey = `${card.Name}|${card.Set}`.toLowerCase();
+    
+    // Check cache first
+    if (scryfallCache[cacheKey]) {
+        return { ...card, ...scryfallCache[cacheKey] };
+    }
+    
+    // Fetch from Scryfall
+    try {
+        await sleep(SCRYFALL_DELAY);
+        
+        const response = await fetch(`${SCRYFALL_API_BASE}/cards/named?exact=${encodeURIComponent(card.Name)}&set=${card.Set}`);
+        
+        if (!response.ok) {
+            // Try without set if first attempt fails
+            const response2 = await fetch(`${SCRYFALL_API_BASE}/cards/named?exact=${encodeURIComponent(card.Name)}`);
+            if (!response2.ok) {
+                return card; // Return original if not found
+            }
+            const data = await response2.json();
+            return enrichCardFromScryfall(card, data);
+        }
+        
+        const data = await response.json();
+        return enrichCardFromScryfall(card, data);
+        
+    } catch (error) {
+        console.error(`Error fetching ${card.Name}:`, error);
+        return card;
+    }
+}
+
+function enrichCardFromScryfall(card, scryfallData) {
+    const enrichedData = {
+        type: scryfallData.type_line,
+        isLegendary: scryfallData.type_line.includes('Legendary'),
+        manaCost: scryfallData.mana_cost || '',
+        cmc: scryfallData.cmc || 0,
+        colors: scryfallData.colors || [],
+        colorIdentity: scryfallData.color_identity || [],
+        isCreature: scryfallData.type_line.includes('Creature'),
+        isLand: scryfallData.type_line.includes('Land'),
+        isInstant: scryfallData.type_line.includes('Instant'),
+        isSorcery: scryfallData.type_line.includes('Sorcery'),
+        isArtifact: scryfallData.type_line.includes('Artifact'),
+        isEnchantment: scryfallData.type_line.includes('Enchantment'),
+        isPlaneswalker: scryfallData.type_line.includes('Planeswalker'),
+        power: scryfallData.power,
+        toughness: scryfallData.toughness,
+        oracleText: scryfallData.oracle_text || '',
+        imageUrl: scryfallData.image_uris?.normal || scryfallData.card_faces?.[0]?.image_uris?.normal
+    };
+    
+    // Detect tags from oracle text
+    enrichedData.tags = detectTagsFromOracleText(enrichedData.oracleText, enrichedData.type);
+    
+    // Cache the enriched data
+    const cacheKey = `${card.Name}|${card.Set}`.toLowerCase();
+    scryfallCache[cacheKey] = enrichedData;
+    
+    return { ...card, ...enrichedData };
+}
+
+function detectTagsFromOracleText(text, typeLine) {
+    const tags = [];
+    const lowerText = text.toLowerCase();
+    const lowerType = typeLine.toLowerCase();
+    
+    // Removal
+    if (lowerText.includes('destroy') || lowerText.includes('exile') || lowerText.includes('damage')) {
+        tags.push('removal');
+    }
+    
+    // Counter
+    if (lowerText.includes('counter target')) {
+        tags.push('counter');
+    }
+    
+    // Draw
+    if (lowerText.includes('draw') || lowerText.includes('card draw')) {
+        tags.push('draw');
+    }
+    
+    // Ramp
+    if (lowerText.includes('search your library for a') && lowerText.includes('land') ||
+        lowerText.includes('add') && lowerText.includes('mana')) {
+        tags.push('ramp');
+    }
+    
+    // Tribal
+    if (lowerType.includes('sliver') || lowerText.includes('sliver')) {
+        tags.push('sliver', 'tribal');
+    }
+    
+    // Big creatures
+    if (lowerType.includes('hydra') || lowerType.includes('wurm') || lowerType.includes('serpent') || lowerType.includes('dragon')) {
+        tags.push('bigcreature');
+    }
+    
+    return tags;
+}
+
 // ===== FILE UPLOAD & PARSING =====
 
 function handleFileUpload(event) {
@@ -245,12 +375,119 @@ function handleFileUpload(event) {
     
     const reader = new FileReader();
     reader.onload = (e) => {
-        parseCSV(e.target.result);
+        parseCSVAndEnrich(e.target.result);
     };
     reader.readAsText(file);
 }
 
+async function parseCSVAndEnrich(csvText) {
+    // Load cache
+    loadScryfallCache();
+    
+    // Parse CSV first
+    const lines = csvText.split('\n');
+    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+    
+    const rawCards = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        
+        const values = parseCSVLine(line);
+        if (values.length < headers.length) continue;
+        
+        const card = {};
+        headers.forEach((header, index) => {
+            card[header] = values[index] ? values[index].replace(/"/g, '') : '';
+        });
+        
+        card.Count = parseInt(card.Count) || 0;
+        card.PrintCount = parseInt(card.PrintCount) || 0;
+        
+        if (card.Count > 0) {
+            rawCards.push(card);
+        }
+    }
+    
+    // Show enrichment modal
+    const totalCards = rawCards.length;
+    const message = `Found ${totalCards} cards in your collection.\n\n` +
+                   `Would you like to enrich card data with Scryfall?\n\n` +
+                   `This will fetch proper card types, legendary status, and mana costs.\n` +
+                   `(Takes ~${Math.ceil(totalCards * 0.1)} seconds for ${totalCards} cards)`;
+    
+    const shouldEnrich = confirm(message);
+    
+    if (shouldEnrich) {
+        // Show progress
+        elements.generationStatus.style.display = 'block';
+        elements.generationStatus.innerHTML = '<div class="loading-spinner"></div><p id="enrichProgress">Enriching cards: 0/' + totalCards + '</p>';
+        
+        cardCollection = [...basicLands];
+        legendaryCards = [];
+        nonBasicLands = [];
+        
+        for (let i = 0; i < rawCards.length; i++) {
+            const card = await enrichCardWithScryfall(rawCards[i]);
+            
+            cardCollection.push(card);
+            
+            // Track legendary creatures for commanders
+            if (card.isLegendary && (card.isCreature || card.isPlaneswalker)) {
+                legendaryCards.push(card);
+            }
+            
+            // Track non-basic lands
+            if (card.isLand) {
+                card.landTier = getLandTier(card.Name);
+                nonBasicLands.push(card);
+            }
+            
+            // Update progress every 10 cards
+            if (i % 10 === 0 || i === rawCards.length - 1) {
+                document.getElementById('enrichProgress').textContent = `Enriching cards: ${i + 1}/${totalCards}`;
+            }
+        }
+        
+        // Save cache
+        saveScryfallCache();
+        
+        elements.generationStatus.style.display = 'none';
+        
+    } else {
+        // Use pattern matching fallback
+        cardCollection = [...basicLands];
+        legendaryCards = [];
+        nonBasicLands = [];
+        
+        rawCards.forEach(card => {
+            card.type = detectCardType(card.Name);
+            card.tags = detectCardTags(card.Name);
+            card.isLegendary = isLegendary(card.Name);
+            
+            cardCollection.push(card);
+            
+            if (card.isLegendary && card.type === 'Creature') {
+                legendaryCards.push(card);
+            }
+            
+            if (card.type === 'Land') {
+                card.landTier = getLandTier(card.Name);
+                nonBasicLands.push(card);
+            }
+        });
+    }
+    
+    updateCollectionStatus();
+    alert(`✅ Collection loaded!\n\n` +
+          `📦 ${cardCollection.length - 5} cards\n` +
+          `👑 ${legendaryCards.length} legendary creatures/planeswalkers (potential commanders)\n` +
+          `🏔️ ${nonBasicLands.length} non-basic lands`);
+}
+
 function parseCSV(csvText) {
+    // Old sync version - kept for compatibility
     const lines = csvText.split('\n');
     const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
     
@@ -274,19 +511,16 @@ function parseCSV(csvText) {
         card.PrintCount = parseInt(card.PrintCount) || 0;
         
         if (card.Count > 0) {
-            // Detect card type
             card.type = detectCardType(card.Name);
             card.tags = detectCardTags(card.Name);
             card.isLegendary = isLegendary(card.Name);
             
             cardCollection.push(card);
             
-            // Track legendary cards for commanders
             if (card.isLegendary && card.type === 'Creature') {
                 legendaryCards.push(card);
             }
             
-            // Track non-basic lands
             if (card.type === 'Land') {
                 card.landTier = getLandTier(card.Name);
                 nonBasicLands.push(card);
@@ -295,10 +529,6 @@ function parseCSV(csvText) {
     }
     
     updateCollectionStatus();
-    alert(`✅ Collection loaded!\n\n` +
-          `📦 ${cardCollection.length - 5} cards\n` +
-          `👑 ${legendaryCards.length} legendary creatures (potential commanders)\n` +
-          `🏔️ ${nonBasicLands.length} non-basic lands`);
 }
 
 function parseCSVLine(line) {
@@ -696,13 +926,17 @@ function selectCards(availableCards, count, archetype, singleton, commander) {
 function scoreCardForDeck(card, archetype, commander) {
     let score = 50;
     
+    // Get card type (use Scryfall data if available, fallback to pattern matching)
+    const cardType = card.type || detectCardType(card.Name);
+    const cardTags = card.tags || detectCardTags(card.Name);
+    
     // Archetype synergy
     if (archetype.preferredTypes) {
-        if (archetype.preferredTypes.includes(card.type.toLowerCase())) {
+        if (archetype.preferredTypes.includes(cardType.toLowerCase())) {
             score += 20;
         }
         
-        for (const tag of card.tags || []) {
+        for (const tag of cardTags) {
             if (archetype.preferredTypes.includes(tag)) {
                 score += 15;
             }
@@ -712,24 +946,49 @@ function scoreCardForDeck(card, archetype, commander) {
     // Commander synergy
     if (commander) {
         const commanderName = commander.Name.toLowerCase();
+        const commanderType = commander.type || '';
         const cardName = card.Name.toLowerCase();
         
-        // Tribal synergy (e.g., Slivers)
-        if (commanderName.includes('sliver') && cardName.includes('sliver')) {
+        // Tribal synergy - check both type line and name
+        // Slivers
+        if ((commanderType.toLowerCase().includes('sliver') || commanderName.includes('sliver')) &&
+            (cardType.toLowerCase().includes('sliver') || cardName.includes('sliver'))) {
             score += 50;
         }
         
         // Big creature synergy
         if (commanderName.includes('wandering') || commanderName.includes('minstrel')) {
-            if (card.tags.includes('bigcreature')) {
+            if (cardTags.includes('bigcreature') || card.cmc >= 6) {
                 score += 40;
             }
-            if (card.tags.includes('ramp')) {
+            if (cardTags.includes('ramp')) {
                 score += 30;
             }
-            if (card.tags.includes('draw')) {
+            if (cardTags.includes('draw')) {
                 score += 25;
             }
+        }
+        
+        // General creature type synergy
+        const commanderCreatureTypes = extractCreatureTypes(commanderType);
+        const cardCreatureTypes = extractCreatureTypes(cardType);
+        
+        for (const ct of commanderCreatureTypes) {
+            if (cardCreatureTypes.includes(ct) && ct !== 'creature') {
+                score += 40; // Tribal match
+            }
+        }
+    }
+    
+    // CMC-based scoring (from Scryfall data)
+    if (card.cmc !== undefined) {
+        // Prefer lower CMC for aggro/tempo
+        if (archetype.name === 'Aggro' || archetype.name === 'Tempo') {
+            if (card.cmc <= 3) score += 10;
+        }
+        // Prefer higher CMC for ramp/control
+        if (archetype.name === 'Ramp' || archetype.name === 'Control') {
+            if (card.cmc >= 5) score += 10;
         }
     }
     
@@ -738,6 +997,22 @@ function scoreCardForDeck(card, archetype, commander) {
     if (card.Rarity === 'Mythic') score += 10;
     
     return score;
+}
+
+function extractCreatureTypes(typeLine) {
+    if (!typeLine) return [];
+    const types = typeLine.toLowerCase();
+    const creatureTypes = [];
+    
+    const knownTypes = ['sliver', 'elf', 'goblin', 'dragon', 'angel', 'demon', 'hydra', 'wurm', 'serpent', 'sphinx', 'elemental', 'zombie', 'vampire', 'werewolf', 'knight', 'soldier', 'wizard', 'shaman'];
+    
+    for (const type of knownTypes) {
+        if (types.includes(type)) {
+            creatureTypes.push(type);
+        }
+    }
+    
+    return creatureTypes;
 }
 
 function calculateDeckScore(mainboard, archetype, colors, commander) {
