@@ -805,8 +805,14 @@ function selectColors(colorPref) {
 
 function filterCardsByParameters(colors, rarityBudget, format, commander) {
     return cardCollection.filter(card => {
+        // CRITICAL: Only use cards we actually own!
+        if (!card.Id.startsWith('BASIC_') && card.Count <= 0) {
+            console.warn(`Skipping ${card.Name} - Count is ${card.Count}`);
+            return false;
+        }
+        
         if (card.Id.startsWith('BASIC_')) return false;
-        if (card.type === 'Land') return false;
+        if (card.type === 'Land' || card.isLand) return false;
         if (commander && card.Id === commander.Id) return false;
         
         // Color identity check for commander decks
@@ -831,37 +837,9 @@ function filterCardsByParameters(colors, rarityBudget, format, commander) {
 function selectLands(colors, count, singleton) {
     const lands = [];
     
-    // Prioritize untapped non-basic lands
-    const untappedLands = nonBasicLands.filter(land => 
-        land.landTier === 'untapped' && 
-        (colors.includes(land.Color) || land.Color === 'Colorless')
-    );
-    
-    const checkLands = nonBasicLands.filter(land => 
-        land.landTier === 'checkland' && 
-        (colors.includes(land.Color) || land.Color === 'Colorless')
-    );
-    
-    // Add untapped lands first
-    for (const land of untappedLands) {
-        if (lands.length < count) {
-            lands.push({ ...land, quantity: singleton ? 1 : Math.min(2, land.Count) });
-        }
-    }
-    
-    // Add checklands
-    for (const land of checkLands) {
-        if (lands.length < count) {
-            lands.push({ ...land, quantity: singleton ? 1 : Math.min(2, land.Count) });
-        }
-    }
-    
-    // Calculate remaining land slots
-    const usedSlots = lands.reduce((sum, l) => sum + l.quantity, 0);
-    let remaining = count - usedSlots;
-    
-    // Fill with basics
-    const landsPerColor = Math.floor(remaining / colors.length);
+    // USE ONLY BASIC LANDS - user will modify non-basics manually
+    const landsPerColor = Math.floor(count / colors.length);
+    let remaining = count;
     
     colors.forEach(color => {
         const basicLand = basicLands.find(l => l.Color === color);
@@ -893,8 +871,17 @@ function selectCards(availableCards, count, archetype, singleton, commander) {
     const selected = [];
     const usedCards = new Set();
     
+    // CRITICAL: Filter to only cards we actually own
+    const ownedCards = availableCards.filter(card => {
+        const owned = card.Count > 0 || card.Id.startsWith('BASIC_');
+        if (!owned) {
+            console.warn(`Filtered out ${card.Name} - Count: ${card.Count}`);
+        }
+        return owned;
+    });
+    
     // Prioritize commander synergies
-    let scoredCards = availableCards.map(card => ({
+    let scoredCards = ownedCards.map(card => ({
         card: card,
         score: scoreCardForDeck(card, archetype, commander)
     }));
@@ -908,7 +895,13 @@ function selectCards(availableCards, count, archetype, singleton, commander) {
         if (remaining <= 0) break;
         if (usedCards.has(card.Id)) continue;
         
-        const maxCopies = singleton ? 1 : Math.min(4, card.Count);
+        // Ensure we don't exceed owned count
+        const maxCopies = singleton ? 1 : Math.min(4, card.Count || 0);
+        if (maxCopies <= 0) {
+            console.warn(`Skipping ${card.Name} - no copies available`);
+            continue;
+        }
+        
         const quantity = singleton ? 1 : Math.min(
             maxCopies,
             Math.ceil(Math.random() * Math.min(2, remaining)),
@@ -1387,20 +1380,20 @@ function exportDeck() {
     // Add commander for Brawl
     if (selectedDeck.commander) {
         exportText += 'Commander\n';
-        exportText += `1 ${selectedDeck.commander.Name} (${selectedDeck.commander.Set}) ${selectedDeck.commander.Id}\n\n`;
+        exportText += `1 ${selectedDeck.commander.Name}\n\n`;
     }
     
     exportText += 'Deck\n';
     selectedDeck.mainboard.forEach(card => {
         if (!card.isCommander) {
-            exportText += `${card.quantity} ${card.Name} (${card.Set})\n`;
+            exportText += `${card.quantity} ${card.Name}\n`;
         }
     });
     
     if (selectedDeck.sideboard.length > 0) {
         exportText += '\nSideboard\n';
         selectedDeck.sideboard.forEach(card => {
-            exportText += `${card.quantity} ${card.Name} (${card.Set})\n`;
+            exportText += `${card.quantity} ${card.Name}\n`;
         });
     }
     
