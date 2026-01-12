@@ -9,145 +9,138 @@
 <body>
     <div class="container">
         <header>
-            <h1>🎴 MTG Arena Deck Builder</h1>
+            <h1>🤖 AI MTG Arena Deck Generator</h1>
             <div class="header-actions">
-                <label for="csvUpload" class="btn btn-primary">Load Collection CSV</label>
+                <label for="csvUpload" class="btn btn-primary">📁 Load Collection CSV</label>
                 <input type="file" id="csvUpload" accept=".csv" style="display: none;">
-                <button id="newDeckBtn" class="btn btn-secondary">New Deck</button>
-                <button id="saveDeckBtn" class="btn btn-success">Save Deck</button>
-                <button id="loadDeckBtn" class="btn btn-info">Load Deck</button>
-                <button id="exportDeckBtn" class="btn btn-warning">Export to Arena</button>
+                <button id="exportDeckBtn" class="btn btn-warning">📤 Export to Arena</button>
+                <button id="saveDeckBtn" class="btn btn-success">💾 Save Deck</button>
+                <button id="loadDeckBtn" class="btn btn-info">📂 Load Deck</button>
             </div>
         </header>
 
         <div class="main-content">
-            <!-- Left Panel: Card Search -->
-            <aside class="search-panel">
-                <div class="search-header">
-                    <h2>Card Search</h2>
+            <!-- Left Panel: AI Deck Generator -->
+            <aside class="generator-panel">
+                <div class="generator-header">
+                    <h2>🧙‍♂️ Deck Generator</h2>
                     <div class="collection-status" id="collectionStatus">
                         <span>No collection loaded</span>
                     </div>
                 </div>
                 
-                <div class="search-controls">
-                    <input type="text" id="cardSearch" placeholder="Search cards..." class="search-input">
-                    
+                <div class="generator-controls">
                     <div class="filter-section">
-                        <h3>Colors</h3>
-                        <div class="color-filters">
-                            <label class="color-filter white">
-                                <input type="checkbox" value="White" class="color-checkbox">
-                                <span>W</span>
-                            </label>
-                            <label class="color-filter blue">
-                                <input type="checkbox" value="Blue" class="color-checkbox">
-                                <span>U</span>
-                            </label>
-                            <label class="color-filter black">
-                                <input type="checkbox" value="Black" class="color-checkbox">
-                                <span>B</span>
-                            </label>
-                            <label class="color-filter red">
-                                <input type="checkbox" value="Red" class="color-checkbox">
-                                <span>R</span>
-                            </label>
-                            <label class="color-filter green">
-                                <input type="checkbox" value="Green" class="color-checkbox">
-                                <span>G</span>
-                            </label>
-                            <label class="color-filter colorless">
-                                <input type="checkbox" value="Colorless" class="color-checkbox">
-                                <span>C</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="filter-section">
-                        <h3>Rarity</h3>
-                        <select id="rarityFilter" class="filter-select">
-                            <option value="">All Rarities</option>
-                            <option value="Common">Common</option>
-                            <option value="Uncommon">Uncommon</option>
-                            <option value="Rare">Rare</option>
-                            <option value="Mythic">Mythic</option>
+                        <h3>⚔️ Deck Archetype</h3>
+                        <select id="archetypeSelect" class="filter-select">
+                            <option value="auto">🎲 Surprise Me!</option>
+                            <option value="aggro">⚡ Aggro (Fast & Aggressive)</option>
+                            <option value="midrange">⚔️ Midrange (Balanced)</option>
+                            <option value="control">🛡️ Control (Defensive)</option>
+                            <option value="combo">💥 Combo (Synergy Focus)</option>
+                            <option value="tempo">⏱️ Tempo (Efficient)</option>
+                            <option value="ramp">🌳 Ramp (Big Mana)</option>
                         </select>
                     </div>
 
                     <div class="filter-section">
-                        <h3>Format</h3>
-                        <select id="formatFilter" class="filter-select">
-                            <option value="all">All Cards</option>
-                            <option value="standard">Standard</option>
-                            <option value="historic">Historic</option>
-                            <option value="explorer">Explorer</option>
-                            <option value="alchemy">Alchemy</option>
+                        <h3>🎨 Color Preference</h3>
+                        <select id="colorPreference" class="filter-select">
+                            <option value="auto">Auto (Best Available)</option>
+                            <option value="mono">Mono Color</option>
+                            <option value="dual">Two Colors</option>
+                            <option value="multi">Multi-Color</option>
                         </select>
                     </div>
 
                     <div class="filter-section">
-                        <label>
-                            <input type="checkbox" id="ownedOnlyCheckbox" checked>
-                            <span>Show Only Owned Cards</span>
+                        <h3>🎯 Deck Format</h3>
+                        <select id="deckFormat" class="filter-select">
+                            <option value="standard">Standard (60 cards)</option>
+                            <option value="historic">Historic (60 cards)</option>
+                            <option value="explorer">Explorer (60 cards)</option>
+                            <option value="alchemy">Alchemy (60 cards)</option>
+                            <option value="brawl">Brawl (60 cards, Singleton)</option>
+                            <option value="historicbrawl">Historic Brawl (100 cards, Singleton)</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-section">
+                        <h3>💎 Rarity Budget</h3>
+                        <select id="rarityBudget" class="filter-select">
+                            <option value="any">Any Rarity</option>
+                            <option value="budget">Budget (Common/Uncommon)</option>
+                            <option value="mixed">Mixed (Some Rares)</option>
+                            <option value="premium">Premium (All Available)</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-section">
+                        <h3>⚙️ Generation Options</h3>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="includeSideboard" checked>
+                            <span>Include Sideboard</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="number" id="numDecks" min="1" max="10" value="5" class="number-input">
+                            <span>Number of Decks to Generate</span>
                         </label>
                     </div>
 
-                    <button id="clearFilters" class="btn btn-secondary">Clear Filters</button>
+                    <button id="generateDecksBtn" class="btn btn-primary btn-large">
+                        ✨ Generate Decks!
+                    </button>
+
+                    <button id="clearGeneratorBtn" class="btn btn-secondary">
+                        🔄 Reset Generator
+                    </button>
                 </div>
 
-                <div class="search-results" id="searchResults">
-                    <div class="loading-message">Load your collection CSV to get started!</div>
+                <div class="generation-status" id="generationStatus" style="display: none;">
+                    <div class="loading-spinner"></div>
+                    <p>Analyzing your collection and generating decks...</p>
                 </div>
             </aside>
 
-            <!-- Center Panel: Deck List -->
-            <main class="deck-panel">
-                <div class="deck-header">
-                    <input type="text" id="deckName" placeholder="Deck Name" class="deck-name-input" value="My Deck">
-                    <div class="deck-format">
-                        <label for="deckFormat">Format:</label>
-                        <select id="deckFormat" class="format-select">
-                            <option value="standard">Standard</option>
-                            <option value="historic">Historic</option>
-                            <option value="explorer">Explorer</option>
-                            <option value="alchemy">Alchemy</option>
-                            <option value="commander">Commander</option>
-                            <option value="brawl">Brawl</option>
-                        </select>
-                    </div>
-                    <div class="deck-stats">
-                        <span class="stat">Mainboard: <strong id="cardCount">0</strong></span>
-                        <span class="stat">Sideboard: <strong id="sideboardCount">0</strong></span>
+            <!-- Center Panel: Generated Decks List -->
+            <main class="decks-list-panel">
+                <div class="decks-list-header">
+                    <h2>🎴 Generated Decks</h2>
+                    <div class="decks-count" id="decksCount">
+                        <span>0 decks generated</span>
                     </div>
                 </div>
 
-                <div class="deck-content">
-                    <div class="deck-tabs">
-                        <button class="tab-btn active" data-tab="mainboard">Mainboard</button>
-                        <button class="tab-btn" data-tab="sideboard">Sideboard</button>
-                    </div>
-
-                    <div id="mainboard" class="tab-content active">
-                        <div class="deck-list" id="deckList">
-                            <div class="empty-message">Add cards from the search panel</div>
-                        </div>
-                    </div>
-
-                    <div id="sideboard" class="tab-content">
-                        <div class="deck-list" id="sideboardList">
-                            <div class="empty-message">Add cards to sideboard</div>
-                        </div>
+                <div class="decks-list-content" id="decksListContent">
+                    <div class="empty-message">
+                        <div class="empty-icon">🎲</div>
+                        <h3>No Decks Generated Yet</h3>
+                        <p>Load your collection CSV and click "Generate Decks!" to get started.</p>
+                        <p class="tip">💡 Tip: The AI will analyze your collection and create multiple complete decks for you!</p>
                     </div>
                 </div>
             </main>
 
-            <!-- Right Panel: Stats & Mana Curve -->
-            <aside class="stats-panel">
-                <div class="stats-header">
-                    <h2>Deck Statistics</h2>
+            <!-- Right Panel: Selected Deck View -->
+            <aside class="deck-view-panel">
+                <div class="deck-view-header">
+                    <h2>📋 Deck Details</h2>
+                    <div class="deck-view-actions" id="deckViewActions" style="display: none;">
+                        <button id="selectDeckBtn" class="btn btn-success btn-small">✓ Use This Deck</button>
+                        <button id="tweakDeckBtn" class="btn btn-secondary btn-small">🔧 Tweak</button>
+                    </div>
                 </div>
 
-                <div class="stats-summary">
+                <div class="deck-view-content" id="deckViewContent">
+                    <div class="empty-message">
+                        <div class="empty-icon">👈</div>
+                        <p>Select a generated deck to view details</p>
+                    </div>
+                </div>
+
+                <div class="deck-stats-detailed" id="deckStatsDetailed" style="display: none;">
+                    <h3>📊 Deck Statistics</h3>
+                    
                     <div class="stat-item">
                         <span class="stat-label">Total Cards:</span>
                         <span class="stat-value" id="totalCards">0</span>
@@ -156,26 +149,26 @@
                         <span class="stat-label">Avg. CMC:</span>
                         <span class="stat-value" id="avgCMC">0.0</span>
                     </div>
-                </div>
 
-                <div class="mana-curve-section">
-                    <h3>Mana Curve</h3>
-                    <div class="mana-curve" id="manaCurve">
-                        <div class="empty-curve">No cards in deck</div>
+                    <div class="mana-curve-section">
+                        <h4>Mana Curve</h4>
+                        <div class="mana-curve" id="manaCurve">
+                            <div class="empty-curve">No data</div>
+                        </div>
                     </div>
-                </div>
 
-                <div class="color-distribution-section">
-                    <h3>Color Distribution</h3>
-                    <div class="color-distribution" id="colorDistribution">
-                        <div class="empty-distribution">No cards in deck</div>
+                    <div class="color-distribution-section">
+                        <h4>Color Distribution</h4>
+                        <div class="color-distribution" id="colorDistribution">
+                            <div class="empty-distribution">No data</div>
+                        </div>
                     </div>
-                </div>
 
-                <div class="type-distribution-section">
-                    <h3>Card Types</h3>
-                    <div class="type-distribution" id="typeDistribution">
-                        <div class="empty-types">No cards in deck</div>
+                    <div class="type-distribution-section">
+                        <h4>Card Types</h4>
+                        <div class="type-distribution" id="typeDistribution">
+                            <div class="empty-types">No data</div>
+                        </div>
                     </div>
                 </div>
             </aside>
